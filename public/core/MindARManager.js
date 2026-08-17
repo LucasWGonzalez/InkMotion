@@ -125,6 +125,58 @@ class MindARManager {
     }
   }
 
+  async compileTarget(imageUrl) {
+    if (!window.MINDAR?.Compiler) throw new Error('No se pudo cargar el compilador MindAR.');
+    EventBus.emit('mindar:compilation-start');
+    try {
+      const image = await this.loadImage(imageUrl);
+      const visualQuality = this.measureVisualQuality(image);
+      if (visualQuality.contrast < 17 || visualQuality.edgeRatio < 0.012) {
+        throw new Error('Imagen con bajo contraste para tracking. Elegí una ilustración con más detalles, bordes y variación de colores.');
+      }
+      const compiler = new window.MINDAR.Compiler();
+      const compiledData = await compiler.compileImageTargets([image], (progress) => {
+        const normalized = progress > 1 ? progress : progress * 100;
+        EventBus.emit('mindar:compilation-progress', { progress: Math.round(normalized) });
+      });
+      const featureCount = this.countCompiledFeatures(compiledData);
+      if (featureCount < 35) throw new Error('La imagen tiene pocos puntos reconocibles. Probá otra con más detalles y menos áreas lisas.');
+      EventBus.emit('mindar:target-quality', { quality: featureCount < 90 ? 'limited' : 'good', featureCount, contrast: Math.round(visualQuality.contrast) });
+      const buffer = await compiler.exportData();
+      return { buffer, blob: new Blob([buffer], { type: 'application/octet-stream' }), featureCount };
+    } catch (error) {
+      const friendly = error instanceof Error ? error : new Error('No se pudo compilar el marcador AR.');
+      EventBus.emit('mindar:compilation-error', friendly);
+      throw friendly;
+    }
+  }
+
+  async setCompiledTarget(targetUrl) {
+    if (!this.isRunning) throw new Error('La cámara todavía no está disponible.');
+    this.disposeController();
+    this.setTargetVisible(false);
+    const response = await fetch(targetUrl, { cache: 'no-store' });
+    if (!response.ok) throw new Error('No se pudo descargar el marcador AR del cuento.');
+    const targetBuffer = await response.arrayBuffer();
+    this.controller = new window.MINDAR.Controller({
+      inputWidth: this.video.videoWidth,
+      inputHeight: this.video.videoHeight,
+      maxTrack: 1,
+      warmupTolerance: this.config.warmupTolerance,
+      missTolerance: this.config.missTolerance,
+      filterMinCF: this.config.filterMinCF,
+      filterBeta: this.config.filterBeta,
+      onUpdate: (data) => this.handleControllerUpdate(data),
+    });
+    const { dimensions } = this.controller.addImageTargetsFromBuffer(targetBuffer);
+    this.targetDimensions = dimensions[0];
+    EventBus.emit('mindar:projection-ready', { projectionMatrix: this.controller.getProjectionMatrix(), videoWidth: this.video.videoWidth, videoHeight: this.video.videoHeight });
+    await this.controller.dummyRun(this.video);
+    this.controller.processVideo(this.video);
+    EventBus.emit('mindar:target-ready', { dimensions: this.targetDimensions });
+    this.startScanFeedbackTimer();
+  }
+
   handleControllerUpdate(data) {
     if (data.type !== 'updateMatrix' || data.targetIndex !== 0) return;
     if (data.worldMatrix) {
@@ -152,6 +204,7 @@ class MindARManager {
   loadImage(url) {
     return new Promise((resolve, reject) => {
       const image = new Image();
+      image.crossOrigin = 'anonymous';
       image.onload = () => resolve(image);
       image.onerror = () => reject(new Error('No se pudo preparar la imagen para tracking.'));
       image.src = url;

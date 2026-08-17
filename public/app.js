@@ -1,178 +1,166 @@
 import MindARManager from './core/MindARManager.js';
 import ParallaxEngine from './core/ParallaxEngine.js';
 import ImageProcessor from './core/ImageProcessor.js';
+import ProjectStore from './services/ProjectStore.js';
 import EventBus from './utils/EventBus.js';
 
 class InkMotionApp {
   constructor() {
-    this.mindAR = null;
-    this.parallax = null;
-    this.imageProcessor = null;
-    this.uploadInput = null;
-    this.initializeApp();
+    this.store = new ProjectStore();
+    this.processor = new ImageProcessor({ maxFileSize: 25 * 1024 * 1024, targetQuality: 0.82 });
+    this.pendingProject = null;
+    this.bindTrackingEvents();
+    this.start();
   }
 
-  async initializeApp() {
-    if (document.readyState === 'loading') {
-      await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
-    }
-    this.setupEvents();
-    this.setupUI();
+  async start() {
+    if (document.readyState === 'loading') await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    if (path === '/') { window.location.replace('/crear'); return; }
+    if (path === '/crear') return this.startAuthor();
+    const match = path.match(/^\/ver\/([0-9a-f-]+)$/i);
+    if (match) return this.startReader(match[1]);
+    this.showFatal('La página solicitada no existe.', '/crear', 'Ir al panel de autor');
+  }
+
+  async startAuthor() {
+    document.body.dataset.route = 'author';
+    document.getElementById('author-view').hidden = false;
+    document.getElementById('auth-form').addEventListener('submit', (event) => this.requestAccess(event));
+    document.getElementById('btn-sign-out').addEventListener('click', async () => { await this.store.signOut(); window.location.reload(); });
+    document.getElementById('story-file').addEventListener('change', (event) => this.prepareStory(event));
+    document.getElementById('publish-form').addEventListener('submit', (event) => this.publishStory(event));
+    document.getElementById('btn-copy-link').addEventListener('click', () => this.copyPublishedLink());
+    const session = await this.store.getSession();
+    this.renderAuthorSession(session);
+    this.store.onAuthChange((nextSession) => this.renderAuthorSession(nextSession));
+  }
+
+  renderAuthorSession(session) {
+    document.getElementById('auth-card').hidden = Boolean(session);
+    document.getElementById('creator-workspace').hidden = !session;
+    if (session) document.getElementById('author-email').textContent = session.user.email || 'Autor';
+  }
+
+  async requestAccess(event) {
+    event.preventDefault();
+    const email = new FormData(event.currentTarget).get('email')?.toString().trim();
+    const status = document.getElementById('auth-status');
     try {
-      this.imageProcessor = new ImageProcessor({ maxFileSize: 25 * 1024 * 1024, targetQuality: 0.82 });
-      this.parallax = new ParallaxEngine({ container: '#ar-overlay' });
-      await this.parallax.init();
-      this.mindAR = new MindARManager({ video: '#video-stream', container: '#ar-container' });
-      this.updateStatus('Iniciando cámara…');
-      const ready = await this.mindAR.init();
-      if (!ready) this.updateStatus('Cámara no disponible. Podés cargar una imagen para probar el efecto.');
-    } catch (error) {
-      console.error(error);
-      this.updateStatus(`No se pudo iniciar: ${error.message}`);
-    }
+      status.textContent = 'Enviando acceso seguro…';
+      await this.store.sendMagicLink(email);
+      status.textContent = 'Revisá tu correo y abrí el enlace para entrar al panel.';
+    } catch (error) { status.textContent = error.message; }
   }
 
-  setupEvents() {
-    EventBus.on('mindar:camera-ready', () => {
-      this.setTrackingState('idle', 'Cámara lista');
-      this.updateStatus('Cámara lista. Subí una imagen target.');
-    });
-    EventBus.on('mindar:camera-error', (error) => {
-      this.setTrackingState('error', 'Error de cámara');
-      this.updateStatus(error.message);
-    });
-    EventBus.on('mindar:error', (error) => {
-      this.setTrackingState('error', 'MindAR no disponible');
-      this.updateStatus(error.message);
-    });
-    EventBus.on('mindar:video-ready', (data) => this.parallax?.setVideoViewport(data));
-    EventBus.on('mindar:projection-ready', (data) => {
-      this.parallax?.setProjectionMatrix(data.projectionMatrix);
-      this.parallax?.setVideoViewport(data);
-    });
-    EventBus.on('mindar:compilation-start', () => {
-      document.getElementById('preview-panel')?.removeAttribute('hidden');
-      this.setTrackingState('compiling', 'Analizando la ilustración');
-      this.updateStatus('Analizando puntos visuales del cuento…');
-    });
-    EventBus.on('mindar:compilation-progress', ({ progress }) => {
-      this.setTrackingState('compiling', `Compilando target · ${Math.min(100, progress)}%`);
-      this.updateStatus(`Preparando marcador AR… ${Math.min(100, progress)}%`);
-    });
-    EventBus.on('mindar:target-quality', ({ quality, featureCount }) => {
-      if (quality === 'limited') {
-        this.setTrackingState('warning', `Calidad media · ${featureCount} puntos`);
-        this.updateStatus('El target puede requerir buena luz y una distancia más corta.');
-      }
-    });
-    EventBus.on('mindar:compilation-error', (error) => {
-      document.getElementById('preview-panel')?.removeAttribute('hidden');
-      this.setTrackingState('error', 'Target no apto');
-      this.updateStatus(error.message);
-    });
-    EventBus.on('mindar:target-ready', () => {
-      this.setTrackingState('scanning', 'Escaneando ilustración');
-      this.updateStatus('Marcador listo · apuntá la cámara hacia la ilustración física');
-    });
-    EventBus.on('mindar:target-update', (data) => this.parallax?.updateWorldAnchor(data));
-    EventBus.on('mindar:target-found', () => {
-      this.parallax?.onTargetFound();
-      this.setTrackingState('found', 'Marcador detectado');
-      this.updateStatus('Cuento detectado · anclaje espacial activo');
-    });
-    EventBus.on('mindar:target-lost', () => {
-      this.parallax?.onTargetLost();
-      this.setTrackingState('lost', 'Marcador perdido · escaneando');
-      this.updateStatus('Buscando la ilustración… mantenela completa dentro de cámara');
-    });
-    EventBus.on('mindar:scan-timeout', ({ message }) => {
-      this.setTrackingState('warning', 'Sin reconocimiento');
-      this.updateStatus(message);
-    });
-    EventBus.on('image-processor:error', (error) => console.warn('ImageProcessor:', error));
-  }
-
-  setupUI() {
-    const uploadButton = document.getElementById('btn-upload-target');
-    const resetButton = document.getElementById('btn-reset-tracking');
-    const mode3D = document.getElementById('btn-mode-3d');
-    const modeCamera = document.getElementById('btn-mode-camera');
-    this.uploadInput = document.createElement('input');
-    this.uploadInput.type = 'file';
-    this.uploadInput.accept = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
-    this.uploadInput.hidden = true;
-    this.uploadInput.addEventListener('change', (event) => this.handleImageUpload(event));
-    document.body.appendChild(this.uploadInput);
-
-    uploadButton?.addEventListener('click', () => this.uploadInput.click());
-    resetButton?.addEventListener('click', () => this.resetTracking());
-    mode3D?.addEventListener('click', () => this.selectPreviewMode('3d'));
-    modeCamera?.addEventListener('click', () => this.selectPreviewMode('camera'));
-  }
-
-  async handleImageUpload(event) {
+  async prepareStory(event) {
     const file = event.target.files?.[0];
-    const button = document.getElementById('btn-upload-target');
-    if (!file || !this.imageProcessor) return;
-    button?.classList.add('loading');
-    if (button) button.disabled = true;
+    if (!file) return;
+    const publish = document.getElementById('btn-publish');
+    publish.disabled = true;
+    this.setBuildState('processing', 'Optimizando la ilustración…', 15);
     try {
-      this.updateStatus(`Optimizando ${(file.size / 1024 / 1024).toFixed(2)} MB…`);
-      const processed = await this.imageProcessor.processImageFile(file, `target-${Date.now()}`);
-      this.updateStatus('Creando relieve y textura 3D…');
-      await this.parallax.setTargetImage(processed.url);
-      await this.mindAR.setImageTarget(processed.url);
-      document.getElementById('preview-panel')?.removeAttribute('hidden');
-      this.selectPreviewMode('3d');
-      this.updateStatus('Target preparado · ahora apuntá la cámara a la ilustración sobre el papel');
+      const processed = await this.processor.processImageFile(file, `story-${Date.now()}`);
+      document.getElementById('author-preview').src = processed.url;
+      document.getElementById('preview-wrap').hidden = false;
+      const compiled = await new MindARManager().compileTarget(processed.url);
+      this.pendingProject = { imageBlob: processed.blob, targetBlob: compiled.blob };
+      this.setBuildState('ready', `Target listo · ${compiled.featureCount} puntos visuales`, 100);
+      publish.disabled = false;
     } catch (error) {
-      console.error(error);
-      document.getElementById('preview-panel')?.removeAttribute('hidden');
-      this.setTrackingState('error', 'No se pudo preparar');
-      this.updateStatus(error.message || 'No se pudo procesar la imagen.');
-    } finally {
-      button?.classList.remove('loading');
-      if (button) button.disabled = false;
-      event.target.value = '';
-    }
+      this.pendingProject = null;
+      this.setBuildState('error', error.message || 'No se pudo procesar esta ilustración.', 0);
+    } finally { event.target.value = ''; }
   }
 
-  setTrackingState(state, label) {
-    const indicator = document.getElementById('tracking-indicator');
-    const trackingLabel = document.getElementById('tracking-label');
-    if (indicator) indicator.dataset.state = state;
-    if (trackingLabel) trackingLabel.textContent = label;
-  }
-
-  selectPreviewMode(mode) {
-    const selected = mode === 'camera' ? 'camera' : '3d';
-    this.parallax?.setPreviewMode(selected);
-    const mode3D = document.getElementById('btn-mode-3d');
-    const modeCamera = document.getElementById('btn-mode-camera');
-    mode3D?.classList.toggle('is-active', selected === '3d');
-    modeCamera?.classList.toggle('is-active', selected === 'camera');
-    mode3D?.setAttribute('aria-pressed', String(selected === '3d'));
-    modeCamera?.setAttribute('aria-pressed', String(selected === 'camera'));
-    this.updateStatus(selected === '3d'
-      ? 'Efecto 3D activo · buscá la ilustración física con la cámara'
-      : 'Modo cámara activo · el contenido AR está oculto');
-  }
-
-  async resetTracking() {
-    const button = document.getElementById('btn-reset-tracking');
-    if (button) button.disabled = true;
+  async publishStory(event) {
+    event.preventDefault();
+    if (!this.pendingProject) return;
+    const button = document.getElementById('btn-publish');
+    const title = new FormData(event.currentTarget).get('title')?.toString().trim() || 'Cuento sin título';
+    button.disabled = true;
+    this.setBuildState('publishing', 'Publicando el cuento y su experiencia AR…', 100);
     try {
-      this.updateStatus('Reiniciando…');
-      await this.mindAR?.reset();
-      this.updateStatus('Buscando nuevamente la ilustración…');
-    } finally {
-      if (button) button.disabled = false;
+      const project = await this.store.saveProject({ title, ...this.pendingProject, config: { depthStrength: 0.08, animation: 'magic-breathe', loopSeconds: 5, anchor: 'mindar' } });
+      const url = `${window.location.origin}/ver/${project.id}`;
+      document.getElementById('public-link').value = url;
+      document.getElementById('btn-open-story').href = url;
+      document.getElementById('publish-result').hidden = false;
+      this.setBuildState('published', 'Cuento publicado correctamente.', 100);
+    } catch (error) {
+      this.setBuildState('error', error.message || 'No se pudo publicar. Intentá nuevamente.', 0);
+      button.disabled = false;
     }
   }
 
-  updateStatus(message) {
-    const status = document.getElementById('status-display');
-    if (status) { status.textContent = message; status.title = message; }
+  async copyPublishedLink() {
+    const input = document.getElementById('public-link');
+    await navigator.clipboard.writeText(input.value);
+    document.getElementById('btn-copy-link').textContent = 'Copiado';
+  }
+
+  setBuildState(state, message, progress) {
+    const box = document.getElementById('build-status');
+    if (!box) return;
+    box.dataset.state = state;
+    document.getElementById('build-label').textContent = message;
+    document.getElementById('build-progress').style.width = `${progress}%`;
+  }
+
+  async startReader(id) {
+    document.body.dataset.route = 'reader';
+    document.getElementById('reader-view').hidden = false;
+    this.setReaderStatus('Cargando cuento…', 'loading');
+    try {
+      const project = await this.store.getProject(id);
+      if (!project) return this.showFatal('Este cuento no existe o todavía no fue publicado.');
+      document.title = `${project.title} · InkMotion`;
+      document.getElementById('reader-title').textContent = project.title;
+      document.getElementById('info-title').textContent = project.title;
+      document.getElementById('btn-info').addEventListener('click', () => document.getElementById('story-info').showModal());
+      document.getElementById('btn-close-info').addEventListener('click', () => document.getElementById('story-info').close());
+      document.getElementById('btn-camera-mode').addEventListener('click', () => this.toggleReaderMode());
+      this.parallax = new ParallaxEngine({ container: '#ar-overlay', depthStrength: Number(project.config?.depthStrength) || 0.08 });
+      await this.parallax.init();
+      await this.parallax.setTargetImage(project.imageUrl);
+      this.mindAR = new MindARManager({ video: '#video-stream' });
+      const ready = await this.mindAR.init();
+      if (!ready) throw new Error('No se pudo iniciar la cámara. Revisá sus permisos.');
+      await this.mindAR.setCompiledTarget(project.targetUrl);
+      this.setReaderStatus('Buscando la ilustración…', 'scanning');
+    } catch (error) { this.showFatal(error.message || 'No se pudo abrir este cuento.'); }
+  }
+
+  toggleReaderMode() {
+    this.readerCameraOnly = !this.readerCameraOnly;
+    this.parallax?.setPreviewMode(this.readerCameraOnly ? 'camera' : '3d');
+    document.getElementById('btn-camera-mode').textContent = this.readerCameraOnly ? 'Ver efecto AR' : 'Solo cámara';
+  }
+
+  bindTrackingEvents() {
+    EventBus.on('mindar:compilation-progress', ({ progress }) => this.setBuildState('processing', `Compilando marcador AR · ${Math.min(100, progress)}%`, Math.min(100, progress)));
+    EventBus.on('mindar:target-found', () => { this.parallax?.onTargetFound(); this.setReaderStatus('Ilustración detectada · AR anclada', 'found'); });
+    EventBus.on('mindar:target-lost', () => { this.parallax?.onTargetLost(); this.setReaderStatus('Buscando la ilustración…', 'lost'); });
+    EventBus.on('mindar:target-update', (data) => this.parallax?.updateWorldAnchor(data));
+    EventBus.on('mindar:projection-ready', (data) => { this.parallax?.setProjectionMatrix(data.projectionMatrix); this.parallax?.setVideoViewport(data); });
+    EventBus.on('mindar:video-ready', (data) => this.parallax?.setVideoViewport(data));
+    EventBus.on('mindar:scan-timeout', ({ message }) => this.setReaderStatus(message, 'warning'));
+  }
+
+  setReaderStatus(message, state) {
+    const status = document.getElementById('reader-status');
+    if (!status) return;
+    status.dataset.state = state;
+    document.getElementById('reader-status-text').textContent = message;
+  }
+
+  showFatal(message, href = '/crear', label = 'Volver a crear') {
+    document.querySelectorAll('main > section').forEach((section) => { section.hidden = true; });
+    const fatal = document.getElementById('fatal-view');
+    fatal.hidden = false;
+    document.getElementById('fatal-message').textContent = message;
+    const link = document.getElementById('fatal-link');
+    link.href = href; link.textContent = label;
   }
 }
 

@@ -42,6 +42,7 @@ class ImageProcessor {
       const processed = {
         name: imageName,
         url: processedUrl,
+        blob,
         originalSize: file.size,
         optimizedSize: blob.size,
         dimensions: { width: canvas.width, height: canvas.height },

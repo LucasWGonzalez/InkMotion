@@ -3,42 +3,20 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
+const port = Number(process.env.PORT) || 8080;
+const mime = { '.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.json':'application/json', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.webp':'image/webp', '.svg':'image/svg+xml', '.mind':'application/octet-stream' };
 
-const PORT = 8080;
-
-const server = http.createServer((req, res) => {
-  let filePath = path.join(__dirname, 'public', req.url === '/' ? 'index.html' : req.url);
-
-  const ext = path.extname(filePath);
-  const mimeTypes = {
-    '.html': 'text/html',
-    '.js': 'application/javascript',
-    '.css': 'text/css',
-    '.json': 'application/json',
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.svg': 'image/svg+xml',
-  };
-
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-    fs.readFile(filePath, (err, content) => {
-      if (err) {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end(`Server error: ${err}`);
-      } else {
-        res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
-        res.end(content);
-      }
-    });
-  } else {
-    res.writeHead(404, { 'Content-Type': 'text/html' });
-    res.end('<h1>404 - File Not Found</h1>');
+http.createServer((req, res) => {
+  const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+  const routeFile = pathname === '/' || pathname === '/crear' || /^\/ver\/[0-9a-f-]+$/i.test(pathname) ? '/index.html' : pathname;
+  const filePath = path.resolve(root, `.${routeFile}`);
+  if (!filePath.startsWith(`${root}${path.sep}`) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    res.writeHead(404, { 'Content-Type':'text/plain; charset=utf-8' }); res.end('404 - Archivo no encontrado'); return;
   }
-});
-
-server.listen(PORT, () => {
-  console.log(`\n🚀 WebAR Storyteller Dev Server running on http://localhost:${PORT}`);
-  console.log(`📱 Open your browser and test the image tracking\n`);
-});
+  fs.readFile(filePath, (error, content) => {
+    if (error) { res.writeHead(500, { 'Content-Type':'text/plain; charset=utf-8' }); res.end('Error interno'); return; }
+    res.writeHead(200, { 'Content-Type': mime[path.extname(filePath).toLowerCase()] || 'application/octet-stream', 'Cache-Control': path.extname(filePath) === '.html' ? 'no-cache' : 'public, max-age=3600' });
+    res.end(content);
+  });
+}).listen(port, () => console.log(`InkMotion disponible en http://localhost:${port}`));
