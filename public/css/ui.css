@@ -1,104 +1,72 @@
-/* UI.css - Estilos de componentes UI */
-
-/* Botones */
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
+.btn, .mode-btn {
+  border: 0;
+  font: inherit;
   cursor: pointer;
-  transition: all 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn {
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: .025em;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  transition: transform .2s ease, opacity .2s ease, box-shadow .2s ease;
+}
+.btn:active { transform: scale(.97); }
+.btn-primary { background: linear-gradient(135deg, #7657ed, #4d8cff); box-shadow: 0 7px 22px rgba(90,91,235,.38); }
+.btn-secondary { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); }
+.btn:disabled { opacity: .5; cursor: wait; }
+.btn.loading { position: relative; color: transparent; }
+.btn.loading::after {
+  content: ''; position: absolute; width: 17px; height: 17px; inset: 0; margin: auto;
+  border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%;
+  animation: spin .75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.preview-panel {
+  position: fixed;
+  z-index: 8;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  width: min(calc(100vw - 24px), 560px);
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 17px;
+  background: rgba(9,9,18,.76);
+  box-shadow: 0 14px 42px rgba(0,0,0,.28);
+  backdrop-filter: blur(16px);
+}
+.preview-panel[hidden] { display: none; }
+.preview-heading { display: grid; gap: 2px; min-width: 0; }
+.preview-heading strong { font-size: 14px; }
+.preview-heading small { color: #b7b7c8; font-size: 11px; }
+.preview-kicker { color: #a99aff; font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.mode-switch { display: flex; gap: 5px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,.07); }
+.mode-btn {
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: transparent;
+  color: #c7c7d2;
+  font-size: 11px;
+  font-weight: 700;
   white-space: nowrap;
 }
+.mode-btn.is-active { color: #fff; background: linear-gradient(135deg, #745be6, #4f7fe8); box-shadow: 0 4px 13px rgba(79,91,220,.32); }
 
-.btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
-}
-
-.btn:active {
-  transform: translateY(0);
-}
-
-/* Botón primario */
-.btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-}
-
-.btn-primary:hover {
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
-}
-
-/* Botón secundario */
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(10px);
-}
-
-.btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-/* Deshabilitado */
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* Loading state */
-.btn.loading {
-  position: relative;
-  color: transparent;
-}
-
-.btn.loading::after {
-  content: '';
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  top: 50%;
-  left: 50%;
-  margin-left: -8px;
-  margin-top: -8px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Status display */
-#status-display {
-  animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Mobile optimizations */
-@media (max-width: 600px) {
-  .btn {
-    padding: 8px 16px;
-    font-size: 12px;
-  }
+@media (max-width: 560px) {
+  .preview-panel { grid-template-columns: 1fr; gap: 9px; }
+  .mode-switch { width: 100%; }
+  .mode-btn { flex: 1; }
+  .btn { padding-inline: 12px; font-size: 11px; }
 }

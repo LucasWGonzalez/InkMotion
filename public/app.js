@@ -41,6 +41,8 @@ class InkMotionApp {
   setupUI() {
     const uploadButton = document.getElementById('btn-upload-target');
     const resetButton = document.getElementById('btn-reset-tracking');
+    const mode3D = document.getElementById('btn-mode-3d');
+    const modeCamera = document.getElementById('btn-mode-camera');
     this.uploadInput = document.createElement('input');
     this.uploadInput.type = 'file';
     this.uploadInput.accept = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
@@ -53,6 +55,8 @@ class InkMotionApp {
       this.uploadInput.click();
     });
     resetButton?.addEventListener('click', () => this.resetTracking());
+    mode3D?.addEventListener('click', () => this.selectPreviewMode('3d'));
+    modeCamera?.addEventListener('click', () => this.selectPreviewMode('camera'));
   }
 
   async handleImageUpload(event) {
@@ -66,8 +70,10 @@ class InkMotionApp {
       const processed = await this.imageProcessor.processImageFile(file, `target-${Date.now()}`);
       this.updateStatus('Creando plano y textura 3D…');
       await this.parallax.setTargetImage(processed.url);
+      document.getElementById('preview-panel')?.removeAttribute('hidden');
+      this.selectPreviewMode('3d');
       const saved = Math.max(0, 100 - (processed.optimizedSize / processed.originalSize) * 100);
-      this.updateStatus(`Plano 3D activo · incliná el celular · ${saved.toFixed(0)}% optimizada`);
+      this.updateStatus(`Cuento vivo activo · relieve + loop de 5 s · ${saved.toFixed(0)}% optimizada`);
     } catch (error) {
       console.error(error);
       this.updateStatus(error.message || 'No se pudo procesar la imagen.');
@@ -76,6 +82,20 @@ class InkMotionApp {
       if (button) button.disabled = false;
       event.target.value = '';
     }
+  }
+
+  selectPreviewMode(mode) {
+    const selected = mode === 'camera' ? 'camera' : '3d';
+    this.parallax?.setPreviewMode(selected);
+    const mode3D = document.getElementById('btn-mode-3d');
+    const modeCamera = document.getElementById('btn-mode-camera');
+    mode3D?.classList.toggle('is-active', selected === '3d');
+    modeCamera?.classList.toggle('is-active', selected === 'camera');
+    mode3D?.setAttribute('aria-pressed', String(selected === '3d'));
+    modeCamera?.setAttribute('aria-pressed', String(selected === 'camera'));
+    this.updateStatus(selected === '3d'
+      ? 'Efecto 3D activo · incliná el celular para explorar la profundidad'
+      : 'Modo cámara activo · la animación está pausada visualmente');
   }
 
   async resetTracking() {
