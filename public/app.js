@@ -33,29 +33,61 @@ class InkMotionApp {
   }
 
   setupEvents() {
-    EventBus.on('mindar:camera-ready', () => this.updateStatus('Cámara lista. Subí una imagen target.'));
-    EventBus.on('mindar:camera-error', (error) => this.updateStatus(error.message));
-    EventBus.on('mindar:error', (error) => this.updateStatus(error.message));
+    EventBus.on('mindar:camera-ready', () => {
+      this.setTrackingState('idle', 'Cámara lista');
+      this.updateStatus('Cámara lista. Subí una imagen target.');
+    });
+    EventBus.on('mindar:camera-error', (error) => {
+      this.setTrackingState('error', 'Error de cámara');
+      this.updateStatus(error.message);
+    });
+    EventBus.on('mindar:error', (error) => {
+      this.setTrackingState('error', 'MindAR no disponible');
+      this.updateStatus(error.message);
+    });
     EventBus.on('mindar:video-ready', (data) => this.parallax?.setVideoViewport(data));
     EventBus.on('mindar:projection-ready', (data) => {
       this.parallax?.setProjectionMatrix(data.projectionMatrix);
       this.parallax?.setVideoViewport(data);
     });
-    EventBus.on('mindar:compilation-start', () => this.updateStatus('Analizando puntos visuales del cuento…'));
+    EventBus.on('mindar:compilation-start', () => {
+      document.getElementById('preview-panel')?.removeAttribute('hidden');
+      this.setTrackingState('compiling', 'Analizando la ilustración');
+      this.updateStatus('Analizando puntos visuales del cuento…');
+    });
     EventBus.on('mindar:compilation-progress', ({ progress }) => {
+      this.setTrackingState('compiling', `Compilando target · ${Math.min(100, progress)}%`);
       this.updateStatus(`Preparando marcador AR… ${Math.min(100, progress)}%`);
     });
+    EventBus.on('mindar:target-quality', ({ quality, featureCount }) => {
+      if (quality === 'limited') {
+        this.setTrackingState('warning', `Calidad media · ${featureCount} puntos`);
+        this.updateStatus('El target puede requerir buena luz y una distancia más corta.');
+      }
+    });
+    EventBus.on('mindar:compilation-error', (error) => {
+      document.getElementById('preview-panel')?.removeAttribute('hidden');
+      this.setTrackingState('error', 'Target no apto');
+      this.updateStatus(error.message);
+    });
     EventBus.on('mindar:target-ready', () => {
+      this.setTrackingState('scanning', 'Escaneando ilustración');
       this.updateStatus('Marcador listo · apuntá la cámara hacia la ilustración física');
     });
     EventBus.on('mindar:target-update', (data) => this.parallax?.updateWorldAnchor(data));
     EventBus.on('mindar:target-found', () => {
       this.parallax?.onTargetFound();
+      this.setTrackingState('found', 'Marcador detectado');
       this.updateStatus('Cuento detectado · anclaje espacial activo');
     });
     EventBus.on('mindar:target-lost', () => {
       this.parallax?.onTargetLost();
+      this.setTrackingState('lost', 'Marcador perdido · escaneando');
       this.updateStatus('Buscando la ilustración… mantenela completa dentro de cámara');
+    });
+    EventBus.on('mindar:scan-timeout', ({ message }) => {
+      this.setTrackingState('warning', 'Sin reconocimiento');
+      this.updateStatus(message);
     });
     EventBus.on('image-processor:error', (error) => console.warn('ImageProcessor:', error));
   }
@@ -95,12 +127,21 @@ class InkMotionApp {
       this.updateStatus('Target preparado · ahora apuntá la cámara a la ilustración sobre el papel');
     } catch (error) {
       console.error(error);
+      document.getElementById('preview-panel')?.removeAttribute('hidden');
+      this.setTrackingState('error', 'No se pudo preparar');
       this.updateStatus(error.message || 'No se pudo procesar la imagen.');
     } finally {
       button?.classList.remove('loading');
       if (button) button.disabled = false;
       event.target.value = '';
     }
+  }
+
+  setTrackingState(state, label) {
+    const indicator = document.getElementById('tracking-indicator');
+    const trackingLabel = document.getElementById('tracking-label');
+    if (indicator) indicator.dataset.state = state;
+    if (trackingLabel) trackingLabel.textContent = label;
   }
 
   selectPreviewMode(mode) {
