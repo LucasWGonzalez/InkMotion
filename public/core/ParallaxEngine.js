@@ -1,240 +1,114 @@
-/**
- * ParallaxEngine.js
- * Motor Parallax 2.5D usando CSS transforms y DeviceMotion
- * Genera efecto de profundidad sin WebGL/Three.js
- */
-
 import EventBus from '../utils/EventBus.js';
 import DeviceMotionListener from '../utils/DeviceMotionListener.js';
 
 class ParallaxEngine {
   constructor(config = {}) {
-    this.config = {
-      container: config.container || '#ar-overlay',
-      depthScale: config.depthScale || 0.05,
-      rotationSensitivity: config.rotationSensitivity || 0.8,
-      baseZoom: config.baseZoom || 1,
-      enableDeviceMotion: config.enableDeviceMotion !== false,
-      ...config,
-    };
-
+    this.config = { container: '#ar-overlay', rotationSensitivity: 0.35, enableDeviceMotion: true, ...config };
     this.layers = new Map();
     this.container = null;
     this.deviceMotion = null;
     this.currentRotation = { x: 0, y: 0 };
     this.isActive = false;
+    this.motionFrame = null;
   }
 
-  /**
-   * Inicializa el motor parallax
-   */
   async init() {
+    this.container = document.querySelector(this.config.container);
+    if (!this.container) throw new Error(`Container no encontrado: ${this.config.container}`);
+    this.container.style.perspective = '1200px';
+    this.container.style.perspectiveOrigin = '50% 50%';
+    this.isActive = true;
+    if (this.config.enableDeviceMotion) {
+      this.deviceMotion = new DeviceMotionListener();
+      await this.deviceMotion.init();
+      this.startMotionTracking();
+    }
+    EventBus.emit('parallax:initialized');
+  }
+
+  async requestMotionPermission() {
+    if (!this.deviceMotion) return false;
     try {
-      console.log('🎭 Inicializando ParallaxEngine...');
-
-      this.container = document.querySelector(this.config.container);
-      if (!this.container) {
-        throw new Error(`Container no encontrado: ${this.config.container}`);
-      }
-
-      // Configurar perspectiva 3D en el contenedor
-      this.container.style.perspective = '1200px';
-      this.container.style.perspectiveOrigin = '50% 50%';
-
-      // Inicializar DeviceMotion si está habilitado
-      if (this.config.enableDeviceMotion) {
-        this.deviceMotion = new DeviceMotionListener();
-        await this.deviceMotion.init();
-        this.startMotionTracking();
-      }
-
-      this.isActive = true;
-      EventBus.emit('parallax:initialized');
-      console.log('✅ ParallaxEngine listo');
+      const enabled = await this.deviceMotion.init({ requestPermission: true });
+      if (enabled) this.startMotionTracking();
+      return enabled;
     } catch (error) {
-      console.error('❌ Error en ParallaxEngine init:', error);
-      EventBus.emit('parallax:error', error);
-      throw error;
+      console.warn('Permiso de movimiento no disponible:', error);
+      return false;
     }
   }
 
-  /**
-   * Crea una capa parallax
-   */
-  createLayer(layerConfig) {
-    const {
-      id,
-      depth = 0.5, // 0-1, donde 0 es trasero y 1 es frente
-      scale = 1,
-      opacity = 1,
-      content = '',
-      className = '',
-    } = layerConfig;
-
+  createLayer({ id, depth = 0.5, scale = 1, opacity = 1, content = '', className = '' }) {
     if (!id) throw new Error('Layer debe tener un ID');
-
+    const old = this.layers.get(id);
+    if (old) old.element.remove();
     const layer = document.createElement('div');
     layer.id = id;
     layer.className = `parallax-layer ${className}`;
     layer.innerHTML = content;
-
-    // Aplicar estilos base
-    Object.assign(layer.style, {
-      position: 'absolute',
-      width: '100%',
-      height: '100%',
-      transformStyle: 'preserve-3d',
-      opacity: opacity,
-      willChange: 'transform',
-      pointerEvents: 'none',
-    });
-
-    // Inicializar transform
-    layer.setAttribute('data-depth', depth);
-    layer.setAttribute('data-scale', scale);
-    this.updateLayerTransform(layer, 0, 0);
-
+    layer.dataset.depth = String(depth);
+    layer.dataset.scale = String(scale);
+    layer.style.opacity = String(opacity);
     this.container.appendChild(layer);
-    this.layers.set(id, {
-      element: layer,
-      depth,
-      scale,
-      opacity,
-      rotation: { x: 0, y: 0 },
-    });
-
+    this.layers.set(id, { element: layer, depth, scale, opacity });
+    this.updateLayerTransform(layer, this.currentRotation.x, this.currentRotation.y);
     return layer;
   }
 
-  /**
-   * Actualiza transform de una capa basado en rotación
-   */
-  updateLayerTransform(layerElement, rotX, rotY) {
-    const depth = parseFloat(layerElement.getAttribute('data-depth'));
-    const scale = parseFloat(layerElement.getAttribute('data-scale'));
-
-    // Calcular perspectiva basada en profundidad
-    const zOffset = depth * 200 - 100; // Rango: -100 a 100px
-    const scaleFactor = 1 + depth * 0.3; // Escala aumenta con profundidad aparente
-
-    // Transform: rotación + escala + traslación Z
-    const transform = `
-      perspective(1000px)
-      rotateX(${rotX * depth}deg)
-      rotateY(${rotY * depth}deg)
-      scale(${scale * scaleFactor})
-      translateZ(${zOffset}px)
-    `;
-
-    layerElement.style.transform = transform.trim();
+  setTargetImage(url) {
+    const layer = this.layers.get('layer-target')?.element;
+    if (!layer) return;
+    layer.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = 'Imagen target seleccionada';
+    img.className = 'target-preview';
+    layer.appendChild(img);
+    this.container.classList.add('has-target');
   }
 
-  /**
-   * Inicia tracking de movimiento del dispositivo
-   */
+  updateLayerTransform(layer, rotX, rotY) {
+    const depth = Number(layer.dataset.depth || 0.5);
+    const scale = Number(layer.dataset.scale || 1);
+    const x = rotY * depth;
+    const y = -rotX * depth;
+    layer.style.transform = `translate3d(calc(-50% + ${x}px), calc(-50% + ${y}px), ${depth * 80}px) rotateX(${rotX * depth}deg) rotateY(${rotY * depth}deg) scale(${scale})`;
+  }
+
   startMotionTracking() {
-    const motionLoop = () => {
-      if (!this.isActive) return;
-
-      const { beta, gamma } = this.deviceMotion.getOrientation();
-
-      // Convertir a rotación X, Y (limitado)
-      const rotX = Math.max(-15, Math.min(15, beta * this.config.rotationSensitivity));
-      const rotY = Math.max(-15, Math.min(15, gamma * this.config.rotationSensitivity));
-
+    if (this.motionFrame) return;
+    const loop = () => {
+      if (!this.isActive) { this.motionFrame = null; return; }
+      const { beta, gamma } = this.deviceMotion?.getOrientation() || { beta: 0, gamma: 0 };
+      const rotX = Math.max(-12, Math.min(12, beta * this.config.rotationSensitivity));
+      const rotY = Math.max(-12, Math.min(12, gamma * this.config.rotationSensitivity));
       this.currentRotation = { x: rotX, y: rotY };
-
-      // Actualizar todas las capas
-      this.layers.forEach((layerData) => {
-        this.updateLayerTransform(layerData.element, rotX, rotY);
-      });
-
-      requestAnimationFrame(motionLoop);
+      this.layers.forEach(({ element }) => this.updateLayerTransform(element, rotX, rotY));
+      this.motionFrame = requestAnimationFrame(loop);
     };
-
-    motionLoop();
+    this.motionFrame = requestAnimationFrame(loop);
   }
 
-  /**
-   * Anima parallax basado en punto target (para AR)
-   */
-  animateToTarget(targetPosition, duration = 300) {
-    const { x, y } = targetPosition;
-
-    // Mapear posición AR a rotación parallax
-    const rotX = (y - 0.5) * 30; // Rango: -15 a 15
-    const rotY = (x - 0.5) * 30;
-
-    this.animateRotation(rotX, rotY, duration);
-  }
-
-  /**
-   * Anima suavemente la rotación
-   */
-  animateRotation(targetRotX, targetRotY, duration = 300) {
-    const startTime = Date.now();
-    const startRotX = this.currentRotation.x;
-    const startRotY = this.currentRotation.y;
-
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-
-      // Easing: ease-out-cubic
-      const easeProgress = 1 - Math.pow(1 - progress, 3);
-
-      const rotX = startRotX + (targetRotX - startRotX) * easeProgress;
-      const rotY = startRotY + (targetRotY - startRotY) * easeProgress;
-
-      this.layers.forEach((layerData) => {
-        this.updateLayerTransform(layerData.element, rotX, rotY);
-      });
-
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
+  animateRotation(targetX, targetY, duration = 300) {
+    const start = performance.now();
+    const origin = { ...this.currentRotation };
+    const step = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const x = origin.x + (targetX - origin.x) * eased;
+      const y = origin.y + (targetY - origin.y) * eased;
+      this.layers.forEach(({ element }) => this.updateLayerTransform(element, x, y));
+      if (progress < 1) requestAnimationFrame(step);
     };
-
-    animate();
+    requestAnimationFrame(step);
   }
 
-  /**
-   * Obtiene configuración de una capa
-   */
-  getLayer(id) {
-    return this.layers.get(id);
-  }
-
-  /**
-   * Actualiza profundidad de una capa
-   */
-  updateLayerDepth(id, newDepth) {
-    const layerData = this.layers.get(id);
-    if (layerData) {
-      layerData.depth = newDepth;
-      layerData.element.setAttribute('data-depth', newDepth);
-      this.updateLayerTransform(layerData.element, this.currentRotation.x, this.currentRotation.y);
-    }
-  }
-
-  /**
-   * Detiene el motor
-   */
+  animateToTarget({ x, y }, duration = 300) { this.animateRotation((y - 0.5) * 24, (x - 0.5) * 24, duration); }
   stop() {
     this.isActive = false;
-    if (this.deviceMotion) {
-      this.deviceMotion.stop();
-    }
-  }
-
-  /**
-   * Limpia todas las capas
-   */
-  clear() {
-    this.layers.forEach((layerData) => {
-      layerData.element.remove();
-    });
-    this.layers.clear();
+    if (this.motionFrame) cancelAnimationFrame(this.motionFrame);
+    this.motionFrame = null;
+    this.deviceMotion?.stop();
   }
 }
 

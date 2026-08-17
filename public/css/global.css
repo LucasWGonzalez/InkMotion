@@ -1,98 +1,14 @@
-/* Global.css - Estilos base y reset */
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html,
-body {
-  width: 100%;
-  height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #000;
-  color: #fff;
-  overflow: hidden;
-}
-
-/* Contenedor principal AR */
-#ar-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-}
-
-/* Video stream */
-#camera-feed {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 10;
-}
-
-#video-stream {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-/* Overlay de AR */
-#ar-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 20;
-  pointer-events: none;
-}
-
-/* UI Panel */
-#ui-container {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  pointer-events: all;
-}
-
-#ui-panel {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-#status-display {
-  flex: 1;
-  text-align: center;
-  font-size: 14px;
-  color: #aaa;
-  font-weight: 500;
-  min-height: 20px;
-}
-
-/* Responsive */
-@media (max-width: 600px) {
-  #ui-panel {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  #status-display {
-    width: 100%;
-    order: 3;
-  }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; height: 100dvh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #050507; color: #fff; overflow: hidden; overscroll-behavior: none; }
+#ar-container { position: fixed; inset: 0; min-height: 100dvh; background: radial-gradient(circle at center, #262631 0, #050507 70%); }
+#camera-feed, #video-stream, #ar-overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+#camera-feed { z-index: 1; }
+#video-stream { object-fit: cover; display: block; background: transparent; }
+#ar-overlay { z-index: 2; pointer-events: none; overflow: hidden; }
+#ui-container { position: fixed; z-index: 10; left: 0; right: 0; bottom: 0; padding-bottom: env(safe-area-inset-bottom); pointer-events: none; }
+#ui-panel { pointer-events: auto; display: grid; grid-template-columns: auto auto minmax(180px, 1fr); gap: 10px; align-items: center; padding: 12px max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); background: rgba(7, 7, 12, .78); backdrop-filter: blur(14px); border-top: 1px solid rgba(255,255,255,.12); }
+#status-display { min-width: 0; text-align: center; color: #d6d6df; font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
+@media (max-width: 680px) {
+  #ui-panel { grid-template-columns: 1fr 1fr; }
+  #status-display { grid-column: 1 / -1; min-height: 34px; display: flex; align-items: center; justify-content: center; }
 }
