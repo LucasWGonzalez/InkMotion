@@ -22,7 +22,6 @@ class InkMotionApp {
       this.imageProcessor = new ImageProcessor({ maxFileSize: 25 * 1024 * 1024, targetQuality: 0.82 });
       this.parallax = new ParallaxEngine({ container: '#ar-overlay', enableDeviceMotion: true });
       await this.parallax.init();
-      this.createDemoLayers();
       this.mindAR = new MindARManager({ video: '#video-stream', container: '#ar-container' });
       this.updateStatus('Iniciando cámara…');
       const ready = await this.mindAR.init();
@@ -31,21 +30,6 @@ class InkMotionApp {
       console.error(error);
       this.updateStatus(`No se pudo iniciar: ${error.message}`);
     }
-  }
-
-  createDemoLayers() {
-    this.parallax.createLayer({
-      id: 'layer-target', depth: 0.15, className: 'target-layer',
-      content: '<div class="target-placeholder"><span>INKMOTION</span><small>Subí una imagen para activar Parallax 2.5D</small></div>',
-    });
-    this.parallax.createLayer({
-      id: 'layer-mid', depth: 0.55, scale: 0.94, className: 'accent-layer',
-      content: '<div class="depth-frame" aria-hidden="true"></div>',
-    });
-    this.parallax.createLayer({
-      id: 'layer-front', depth: 0.9, scale: 0.9, className: 'badge-layer',
-      content: '<div class="depth-badge">3D Depth</div>',
-    });
   }
 
   setupEvents() {
@@ -80,9 +64,10 @@ class InkMotionApp {
     try {
       this.updateStatus(`Optimizando ${(file.size / 1024 / 1024).toFixed(2)} MB…`);
       const processed = await this.imageProcessor.processImageFile(file, `target-${Date.now()}`);
-      this.parallax.setTargetImage(processed.url);
+      this.updateStatus('Creando plano y textura 3D…');
+      await this.parallax.setTargetImage(processed.url);
       const saved = Math.max(0, 100 - (processed.optimizedSize / processed.originalSize) * 100);
-      this.updateStatus(`Imagen lista · ${processed.dimensions.width}×${processed.dimensions.height}px · ${saved.toFixed(0)}% optimizada`);
+      this.updateStatus(`Plano 3D activo · incliná el celular · ${saved.toFixed(0)}% optimizada`);
     } catch (error) {
       console.error(error);
       this.updateStatus(error.message || 'No se pudo procesar la imagen.');

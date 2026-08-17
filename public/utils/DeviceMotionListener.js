@@ -1,8 +1,10 @@
 class DeviceMotionListener {
   constructor() {
     this.orientation = { alpha: 0, beta: 0, gamma: 0 };
+    this.baseline = null;
     this.isSupported = typeof window.DeviceOrientationEvent !== 'undefined';
     this.isListening = false;
+    this.hasReading = false;
     this.boundHandler = this.handleOrientation.bind(this);
   }
 
@@ -22,14 +24,28 @@ class DeviceMotionListener {
   }
 
   handleOrientation(event) {
+    if (!Number.isFinite(event.beta) || !Number.isFinite(event.gamma)) return;
     this.orientation = {
       alpha: Number.isFinite(event.alpha) ? event.alpha : 0,
-      beta: Number.isFinite(event.beta) ? event.beta : 0,
-      gamma: Number.isFinite(event.gamma) ? event.gamma : 0,
+      beta: event.beta,
+      gamma: event.gamma,
+    };
+    this.hasReading = true;
+    if (!this.baseline) this.baseline = { ...this.orientation };
+  }
+
+  getTilt() {
+    if (!this.baseline) return { beta: 0, gamma: 0 };
+    return {
+      beta: this.orientation.beta - this.baseline.beta,
+      gamma: this.orientation.gamma - this.baseline.gamma,
     };
   }
 
-  getOrientation() { return { ...this.orientation }; }
+  recalibrate() {
+    this.baseline = this.hasReading ? { ...this.orientation } : null;
+  }
+
   stop() {
     window.removeEventListener('deviceorientation', this.boundHandler);
     this.isListening = false;
