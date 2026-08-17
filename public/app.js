@@ -20,7 +20,7 @@ class InkMotionApp {
     this.setupUI();
     try {
       this.imageProcessor = new ImageProcessor({ maxFileSize: 25 * 1024 * 1024, targetQuality: 0.82 });
-      this.parallax = new ParallaxEngine({ container: '#ar-overlay', enableDeviceMotion: true });
+      this.parallax = new ParallaxEngine({ container: '#ar-overlay' });
       await this.parallax.init();
       this.mindAR = new MindARManager({ video: '#video-stream', container: '#ar-container' });
       this.updateStatus('Iniciando cámara…');
@@ -35,6 +35,28 @@ class InkMotionApp {
   setupEvents() {
     EventBus.on('mindar:camera-ready', () => this.updateStatus('Cámara lista. Subí una imagen target.'));
     EventBus.on('mindar:camera-error', (error) => this.updateStatus(error.message));
+    EventBus.on('mindar:error', (error) => this.updateStatus(error.message));
+    EventBus.on('mindar:video-ready', (data) => this.parallax?.setVideoViewport(data));
+    EventBus.on('mindar:projection-ready', (data) => {
+      this.parallax?.setProjectionMatrix(data.projectionMatrix);
+      this.parallax?.setVideoViewport(data);
+    });
+    EventBus.on('mindar:compilation-start', () => this.updateStatus('Analizando puntos visuales del cuento…'));
+    EventBus.on('mindar:compilation-progress', ({ progress }) => {
+      this.updateStatus(`Preparando marcador AR… ${Math.min(100, progress)}%`);
+    });
+    EventBus.on('mindar:target-ready', () => {
+      this.updateStatus('Marcador listo · apuntá la cámara hacia la ilustración física');
+    });
+    EventBus.on('mindar:target-update', (data) => this.parallax?.updateWorldAnchor(data));
+    EventBus.on('mindar:target-found', () => {
+      this.parallax?.onTargetFound();
+      this.updateStatus('Cuento detectado · anclaje espacial activo');
+    });
+    EventBus.on('mindar:target-lost', () => {
+      this.parallax?.onTargetLost();
+      this.updateStatus('Buscando la ilustración… mantenela completa dentro de cámara');
+    });
     EventBus.on('image-processor:error', (error) => console.warn('ImageProcessor:', error));
   }
 
@@ -50,10 +72,7 @@ class InkMotionApp {
     this.uploadInput.addEventListener('change', (event) => this.handleImageUpload(event));
     document.body.appendChild(this.uploadInput);
 
-    uploadButton?.addEventListener('click', async () => {
-      await this.parallax?.requestMotionPermission();
-      this.uploadInput.click();
-    });
+    uploadButton?.addEventListener('click', () => this.uploadInput.click());
     resetButton?.addEventListener('click', () => this.resetTracking());
     mode3D?.addEventListener('click', () => this.selectPreviewMode('3d'));
     modeCamera?.addEventListener('click', () => this.selectPreviewMode('camera'));
@@ -68,12 +87,12 @@ class InkMotionApp {
     try {
       this.updateStatus(`Optimizando ${(file.size / 1024 / 1024).toFixed(2)} MB…`);
       const processed = await this.imageProcessor.processImageFile(file, `target-${Date.now()}`);
-      this.updateStatus('Creando plano y textura 3D…');
+      this.updateStatus('Creando relieve y textura 3D…');
       await this.parallax.setTargetImage(processed.url);
+      await this.mindAR.setImageTarget(processed.url);
       document.getElementById('preview-panel')?.removeAttribute('hidden');
       this.selectPreviewMode('3d');
-      const saved = Math.max(0, 100 - (processed.optimizedSize / processed.originalSize) * 100);
-      this.updateStatus(`Cuento vivo activo · relieve + loop de 5 s · ${saved.toFixed(0)}% optimizada`);
+      this.updateStatus('Target preparado · ahora apuntá la cámara a la ilustración sobre el papel');
     } catch (error) {
       console.error(error);
       this.updateStatus(error.message || 'No se pudo procesar la imagen.');
@@ -94,8 +113,8 @@ class InkMotionApp {
     mode3D?.setAttribute('aria-pressed', String(selected === '3d'));
     modeCamera?.setAttribute('aria-pressed', String(selected === 'camera'));
     this.updateStatus(selected === '3d'
-      ? 'Efecto 3D activo · incliná el celular para explorar la profundidad'
-      : 'Modo cámara activo · la animación está pausada visualmente');
+      ? 'Efecto 3D activo · buscá la ilustración física con la cámara'
+      : 'Modo cámara activo · el contenido AR está oculto');
   }
 
   async resetTracking() {
@@ -104,8 +123,7 @@ class InkMotionApp {
     try {
       this.updateStatus('Reiniciando…');
       await this.mindAR?.reset();
-      this.parallax?.animateRotation(0, 0, 300);
-      this.updateStatus('Listo. Podés cargar otra imagen.');
+      this.updateStatus('Buscando nuevamente la ilustración…');
     } finally {
       if (button) button.disabled = false;
     }

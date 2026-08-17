@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="css/global.css">
   <link rel="stylesheet" href="css/parallax.css">
   <link rel="stylesheet" href="css/ui.css">
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
 </head>
 <body>
   <main id="ar-container">
@@ -20,7 +21,7 @@
       <div class="preview-heading">
         <span class="preview-kicker">LIBROS VIVOS</span>
         <strong>Vista Previa de Cuento AR</strong>
-        <small>Relieve automático · animación de 5 segundos</small>
+        <small>Anclaje MindAR · relieve automático · loop de 5 segundos</small>
       </div>
       <div class="mode-switch" role="group" aria-label="Modo de vista">
         <button id="btn-mode-3d" class="mode-btn is-active" type="button" aria-pressed="true">
@@ -35,7 +36,7 @@
     <div id="ui-container">
       <div id="ui-panel">
         <button id="btn-upload-target" class="btn btn-primary" type="button">Subir ilustración</button>
-        <button id="btn-reset-tracking" class="btn btn-secondary" type="button">Recentrar</button>
+        <button id="btn-reset-tracking" class="btn btn-secondary" type="button">Buscar marcador</button>
         <div id="status-display" role="status" aria-live="polite">Preparando InkMotion…</div>
       </div>
     </div>
