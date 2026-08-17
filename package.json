@@ -1,0 +1,14 @@
+{
+  "name": "webr-storyteller",
+  "version": "1.0.0",
+  "description": "WebAR Storyteller - Parallax 2.5D storytelling with MindAR image tracking",
+  "main": "src/app.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js"
+  },
+  "keywords": ["webAR", "parallax", "mindAR", "storytelling"],
+  "author": "",
+  "license": "MIT"
+}
