@@ -3,6 +3,7 @@ import ParallaxEngine from './core/ParallaxEngine.js';
 import ImageProcessor from './core/ImageProcessor.js';
 import ProjectStore from './services/ProjectStore.js';
 import EventBus from './utils/EventBus.js';
+import { renderStoryQR } from './utils/QRGenerator.js';
 
 class InkMotionApp {
   constructor() {
@@ -31,6 +32,7 @@ class InkMotionApp {
     document.getElementById('story-file').addEventListener('change', (event) => this.prepareStory(event));
     document.getElementById('publish-form').addEventListener('submit', (event) => this.publishStory(event));
     document.getElementById('btn-copy-link').addEventListener('click', () => this.copyPublishedLink());
+    document.getElementById('btn-download-qr').addEventListener('click', () => this.downloadQR());
     const session = await this.store.getSession();
     this.renderAuthorSession(session);
     this.store.onAuthChange((nextSession) => this.renderAuthorSession(nextSession));
@@ -85,6 +87,8 @@ class InkMotionApp {
       const url = `${window.location.origin}/ver/${project.id}`;
       document.getElementById('public-link').value = url;
       document.getElementById('btn-open-story').href = url;
+      this.publishedTitle = title;
+      await this.prepareQR(url);
       document.getElementById('publish-result').hidden = false;
       this.setBuildState('published', 'Cuento publicado correctamente.', 100);
     } catch (error) {
@@ -97,6 +101,38 @@ class InkMotionApp {
     const input = document.getElementById('public-link');
     await navigator.clipboard.writeText(input.value);
     document.getElementById('btn-copy-link').textContent = 'Copiado';
+  }
+
+  async prepareQR(publicUrl) {
+    const canvas = document.getElementById('story-qr');
+    const canvasWrap = document.getElementById('qr-canvas-wrap');
+    const status = document.getElementById('qr-status');
+    const download = document.getElementById('btn-download-qr');
+    status.textContent = 'Generando código QR…';
+    download.disabled = true;
+    try {
+      this.qrDataUrl = await renderStoryQR(canvas, publicUrl);
+      canvasWrap.hidden = false;
+      canvas.hidden = false;
+      status.textContent = 'QR listo para impresión · PNG de 1024 × 1024 px';
+      download.disabled = false;
+    } catch (error) {
+      canvas.hidden = true;
+      canvasWrap.hidden = true;
+      status.textContent = 'El cuento fue publicado, pero no se pudo generar el QR. Recargá e intentá nuevamente.';
+      console.error(error);
+    }
+  }
+
+  downloadQR() {
+    if (!this.qrDataUrl) return;
+    const slug = (this.publishedTitle || 'cuento-ar').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cuento-ar';
+    const link = document.createElement('a');
+    link.href = this.qrDataUrl;
+    link.download = `inkmotion-${slug}-qr.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   }
 
   setBuildState(state, message, progress) {
