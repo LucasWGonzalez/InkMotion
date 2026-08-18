@@ -1,175 +1,148 @@
-# WebAR Storyteller
+# InkMotion · Libros Vivos
 
-**WebAR Storyteller** es una plataforma de realidad aumentada web que combina:
-- 🎯 **Image Target Tracking** con MindAR
-- 🎭 **Motor Parallax 2.5D** basado en CSS transforms y DeviceMotion
-- 🖼️ **Procesamiento de imágenes** en cliente con Canvas 2D nativo
+**InkMotion** es una plataforma de **realidad aumentada web** (WebAR) que convierte ilustraciones impresas —portadas, historietas, pósters, cuentos— en experiencias interactivas ancladas al papel, directamente en el navegador y **sin apps**.
+
+- 🎯 **Image Target Tracking** con MindAR (marcador compilado por imagen)
+- 🌋 **Motor de relieve 2.5D** con Three.js + WebGL y shaders GLSL propios
+- 🖼️ **Procesamiento de imágenes** en cliente con Canvas 2D
+- 🔗 **Publicación con QR** para imprimir el acceso AR en el libro físico
+- 🔐 **Autor sin contraseña** (magic link) sobre Supabase
 
 ## 📁 Estructura del Proyecto
 
 ```
-webr-storyteller/
+InkMotion/
 ├── public/
-│   └── index.html              # HTML raíz con CDN MindAR
-├── src/
+│   ├── index.html                # SPA: panel de autor + lector AR
+│   ├── app.js                    # Orquestador y ruteo (/crear, /ver/:id)
 │   ├── core/
-│   │   ├── MindARManager.js     # Gestión de tracking AR
-│   │   ├── ParallaxEngine.js    # Motor 2.5D CSS
-│   │   └── ImageProcessor.js    # Optimización de imágenes
+│   │   ├── MindARManager.js      # Cámara, compilación y tracking del marcador
+│   │   ├── MindARLoader.js       # Carga resiliente del SDK MindAR (CDN)
+│   │   ├── ParallaxEngine.js     # Motor 2.5D con Three.js/WebGL + shaders
+│   │   └── ImageProcessor.js     # Validación, resize y compresión de imágenes
+│   ├── services/
+│   │   └── ProjectStore.js       # Auth + persistencia (Supabase)
 │   ├── ui/
-│   │   └── UIController.js      # Componentes de interfaz
+│   │   └── UIController.js        # Componentes de interfaz
 │   ├── utils/
-│   │   ├── EventBus.js          # Event emitter
-│   │   └── DeviceMotionListener.js # Acelerómetro/giroscopio
-│   ├── css/
-│   │   ├── global.css           # Estilos base
-│   │   ├── parallax.css         # Estilos parallax
-│   │   └── ui.css               # Estilos de componentes
-│   └── app.js                   # Orquestador principal
-├── package.json                 # Dependencias
-├── server.js                    # Servidor Node.js de desarrollo
-└── README.md                    # Este archivo
+│   │   ├── EventBus.js            # Pub/Sub para desacoplar módulos
+│   │   ├── QRGenerator.js         # Generación de QR para impresión
+│   │   └── DeviceMotionListener.js
+│   └── css/
+│       ├── global.css
+│       ├── parallax.css
+│       ├── ui.css
+│       └── routes.css
+├── supabase/                     # Esquema / configuración de backend
+├── server.js                     # Servidor estático de desarrollo (Node)
+├── vercel.json                   # Configuración de deploy
+└── package.json
 ```
 
 ## 🚀 Guía Rápida
 
-### 1. Instalar y Correr
+### 1. Instalar y correr
 
 ```bash
-cd webr-storyteller
-npm start
-```
-
-Luego abre en tu navegador:
-```
-http://localhost:8080
+npm start          # sirve /public en http://localhost:8080
+# o, con recarga:
+npm run dev
 ```
 
 ### 2. Flujo de uso
 
-1. **Abre la aplicación** en dispositivo móvil (requiere HTTPS o localhost)
-2. **Sube una imagen target** usando el botón "Subir Imagen Target"
-3. **La imagen se procesa** (optimización automática)
-4. **Mueve la cámara** para detectar la imagen en el mundo real
-5. **Observa el parallax** 3D respondiendo a los movimientos del dispositivo
+**Autor** (`/crear`):
+1. Ingresá con tu correo (magic link, sin contraseña).
+2. Subí una ilustración (JPG, PNG, WebP, HEIC · hasta 25 MB).
+3. La imagen se optimiza y se **compila un marcador AR** (se valida contraste y cantidad de puntos reconocibles).
+4. Publicá el cuento y descargá su **QR** para imprimir junto a la obra.
+
+**Lector** (`/ver/:id`):
+1. Abrí el enlace (o escaneá el QR) en el móvil.
+2. Dale permiso a la cámara y apuntá a la ilustración impresa.
+3. Al detectarse, el contenido AR queda **anclado al papel** con relieve y animación.
 
 ### 3. Requisitos
 
-- ✅ Navegador moderno (Chrome, Firefox, Safari mobile)
-- ✅ Cámara web / frontal del dispositivo
-- ✅ Soporte DeviceOrientation (giroscopio)
-- ✅ Conexión HTTPS o localhost (requerimiento de cámara)
+- Navegador moderno con **WebGL** (Chrome, Safari mobile, Firefox)
+- Cámara trasera del dispositivo
+- Conexión **HTTPS o localhost** (requisito de cámara)
 
 ## 🔧 Componentes Core
 
 ### MindARManager
-Integración ligera de MindAR en modo image-target.
+Gestiona cámara, compilación del marcador y tracking en tiempo real.
 
-**Métodos principales:**
-- `init()` - Inicializa cámara y tracking
-- `addImageTarget(url)` - Agrega nuevo target
-- `getTrackedTargets()` - Obtiene targets actuales
-- `stop()` - Detiene tracking
+- `init()` — abre la cámara trasera y prepara el motor MindAR
+- `compileTarget(url)` — compila la imagen a marcador; valida contraste (`< 17` rechaza), densidad de bordes y cantidad de puntos (`< 35` rechaza; `< 90` = calidad *limited*)
+- `setCompiledTarget(url)` — carga un marcador ya compilado y arranca el tracking
+- `measureVisualQuality(image)` — mide contraste y `edgeRatio` antes de compilar
 
-**Eventos emitidos:**
-- `mindar:initialized`
-- `mindar:camera-ready`
-- `mindar:target-detected`
-- `mindar:target-lost`
+Eventos: `mindar:target-found`, `mindar:target-lost`, `mindar:target-update` (worldMatrix), `mindar:projection-ready`, `mindar:scan-timeout`.
 
 ### ParallaxEngine
-Motor 2.5D sin WebGL que usa CSS transforms y DeviceMotion.
+Motor 2.5D con **Three.js / WebGL** (no CSS). Renderiza la ilustración como un plano de `80×60` subdivisiones deformado por un **shader de profundidad** derivado de la luminancia, y la ancla al mundo con la matriz de MindAR (`updateWorldAnchor`).
 
-**Métodos principales:**
-- `init()` - Inicializa motor
-- `createLayer(config)` - Crea capa parallax
-- `updateLayerDepth(id, depth)` - Ajusta profundidad
-- `animateToTarget(position, duration)` - Anima a posición
-
-**Características:**
-- Perspectiva CSS 3D
-- Tracking de DeviceOrientation
-- Animaciones suaves con easing
+- `init()` — crea escena, cámara y renderer WebGL con fondo transparente
+- `setTargetImage(url)` — carga la textura y arma malla + marco + partículas
+- `updateWorldAnchor({ worldMatrix, dimensions })` — fija el contenido sobre el marcador
+- `setProjectionMatrix(matrix)` / `setVideoViewport(...)` — alinea con la cámara real
+- `setPreviewMode('3d' | 'camera')` — alterna entre efecto AR y solo cámara
 
 ### ImageProcessor
-Procesa y optimiza imágenes en cliente.
+Optimiza la imagen en cliente antes de compilar.
 
-**Métodos principales:**
-- `processImageFile(file)` - Procesa archivo
-- `validateFile(file)` - Valida formato y tamaño
-- `resizeImage(img)` - Redimensiona automáticamente
-- `optimizeImage(canvas)` - Comprime con Canvas
+- Valida formato y tamaño (máx. 25 MB) y dimensiones mínimas (200×200)
+- Redimensiona hasta `1920×1920` con suavizado alta calidad
+- Exporta a **JPEG** con calidad `0.82`
 
-**Características:**
-- Validación de formato (JPEG, PNG, WebP)
-- Redimensionamiento automático
-- Compresión automática con Canvas 2D
-- Reducción de ruido
+## ✨ Efectos AR aplicados a la imagen
 
-## 📱 Configuración por Dispositivo
+Todos los efectos se calculan en GPU y quedan anclados a la ilustración física:
 
-### iOS (Safari)
-Requiere solicitar permisos de cámara y orientación.
+| Efecto | Qué hace | Cómo |
+|--------|----------|------|
+| **Relieve por profundidad** | Levanta zonas claras, hunde oscuras | Displacement por luminancia en el vertex shader |
+| **Parallax de cámara** | Sensación de mirar *dentro* de la imagen al mover el móvil | Desplazamiento de UV según la dirección de vista |
+| **Ondulación orgánica** | Sutil movimiento tipo viento/agua | Seno animado sobre el loop de 5 s |
+| **Respiración (breathing)** | Escala rítmica ±0.8 % | Loop de 5 s |
+| **Partículas mágicas** | Chispas doradas flotantes (additive blending) | 24/36 puntos animados |
+| **Marco luminoso** | Halo violeta alrededor de la obra | Plano semitransparente detrás |
+| **Realce de luz** | Refuerza el relieve iluminando lo elevado | En el fragment shader |
 
-```javascript
-// En DeviceOrientationEvent.requestPermission()
-// Solicita permiso explícitamente
-```
-
-### Android (Chrome)
-Soportado nativamente, requiere HTTPS o localhost.
+Parámetro clave: `depthStrength` (por defecto `0.08`–`0.12`) controla la intensidad del relieve; se guarda por proyecto en `config`.
 
 ## 🎨 Personalización
 
-### Ajustar sensibilidad parallax
+Intensidad del relieve, al crear el motor (`app.js`):
 
-En `src/app.js`:
 ```javascript
 this.parallax = new ParallaxEngine({
-  depthScale: 0.05,              // Escala de profundidad
-  rotationSensitivity: 0.8,      // Sensibilidad giroscopio
-  baseZoom: 1,                   // Zoom inicial
+  container: '#ar-overlay',
+  depthStrength: 0.1,   // más alto = relieve más marcado
 });
 ```
 
-### Cambiar targets iniciales
+Duración del loop de animación: constante `LOOP_DURATION` en `ParallaxEngine.js`.
 
-En `src/app.js` método `createDemoLayers()`:
-```javascript
-this.parallax.createLayer({
-  id: 'layer-custom',
-  depth: 0.5,                    // 0-1 (lejano-cercano)
-  scale: 0.8,
-  content: `<div>...</div>`,
-});
-```
+## 📱 Notas por Dispositivo
 
-## 📊 Debug
-
-Abre la consola del navegador (F12) para ver logs:
-
-```
-🚀 Inicializando WebAR Storyteller...
---- INICIALIZANDO MÓDULOS CORE ---
-✅ ImageProcessor inicializado
-✅ ParallaxEngine inicializado
-✅ MindARManager inicializado
-```
+- **iOS (Safari):** requiere permiso explícito de cámara; el tracking usa la cámara trasera (`facingMode: environment`).
+- **Android (Chrome):** soportado nativamente sobre HTTPS/localhost.
 
 ## ⚠️ Limitaciones Actuales
 
-- Single image target por vez (configurable en MindARManager)
-- Parallax basado en CSS (no soporta texturas complejas)
-- Requisito de permisos de cámara explícitos
-- Mejor rendimiento en dispositivos con GPU
+- Un solo target por experiencia (`maxTrack: 1`)
+- El relieve se infiere de la **luminancia**, no de un mapa de profundidad real
+- Requiere WebGL y buena iluminación / bajo reflejo para un tracking estable
+- Imágenes de bajo contraste o muy "lisas" son rechazadas en la compilación
 
 ## 🔮 Próximos Pasos
 
 - [ ] Múltiples targets simultáneos
-- [ ] Animaciones basadas en tracking
-- [ ] Capas con contenido HTML/Canvas
-- [ ] Estadísticas de performance
-- [ ] Integración con WASM para procesamiento más rápido
+- [ ] Mapas de profundidad reales (en vez de luminancia)
+- [ ] Capas de contenido HTML/video sobre el marcador
+- [ ] Métricas de tracking y performance
 
 ## 📝 Licencia
 
@@ -177,9 +150,4 @@ MIT
 
 ---
 
-**Construido con:**
-- MindAR SDK
-- CSS 3D Transforms
-- Canvas 2D nativo
-- DeviceOrientation API
-- Vanilla JavaScript (ES6 Modules)
+**Construido con:** MindAR · Three.js (WebGL + GLSL) · Canvas 2D · Supabase · Vanilla JS (ES Modules)
