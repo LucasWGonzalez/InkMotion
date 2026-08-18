@@ -1,4 +1,5 @@
 import EventBus from '../utils/EventBus.js';
+import { ensureMindAR } from './MindARLoader.js';
 
 class MindARManager {
   constructor(config = {}) {
@@ -28,11 +29,10 @@ class MindARManager {
       EventBus.emit('mindar:camera-error', error);
       return false;
     }
-    if (!window.MINDAR?.Compiler || !window.MINDAR?.Controller) {
-      const error = new Error('No se pudo cargar el motor MindAR.');
-      EventBus.emit('mindar:error', error);
-      return false;
-    }
+    let mindar;
+    try { mindar = await this.ensureEngine(); }
+    catch (error) { EventBus.emit('mindar:error', error); return false; }
+    this.mindar = mindar;
     return this.startCamera();
   }
 
@@ -75,7 +75,8 @@ class MindARManager {
       if (visualQuality.contrast < 17 || visualQuality.edgeRatio < 0.012) {
         throw new Error('Imagen con bajo contraste para tracking. Elegí una ilustración con más detalles, bordes y variación de colores.');
       }
-      const compiler = new window.MINDAR.Compiler();
+      const mindar = this.mindar || await this.ensureEngine();
+      const compiler = new mindar.Compiler();
       const compiledData = await compiler.compileImageTargets([image], (progress) => {
         const normalized = progress > 1 ? progress : progress * 100;
         EventBus.emit('mindar:compilation-progress', { progress: Math.round(normalized) });
@@ -92,7 +93,7 @@ class MindARManager {
       });
       const targetBuffer = await compiler.exportData();
 
-      this.controller = new window.MINDAR.Controller({
+      this.controller = new mindar.Controller({
         inputWidth: this.video.videoWidth,
         inputHeight: this.video.videoHeight,
         maxTrack: 1,
@@ -126,7 +127,8 @@ class MindARManager {
   }
 
   async compileTarget(imageUrl) {
-    if (!window.MINDAR?.Compiler) throw new Error('No se pudo cargar el compilador MindAR.');
+    const mindar = this.mindar || await this.ensureEngine();
+    this.mindar = mindar;
     EventBus.emit('mindar:compilation-start');
     try {
       const image = await this.loadImage(imageUrl);
@@ -134,7 +136,7 @@ class MindARManager {
       if (visualQuality.contrast < 17 || visualQuality.edgeRatio < 0.012) {
         throw new Error('Imagen con bajo contraste para tracking. Elegí una ilustración con más detalles, bordes y variación de colores.');
       }
-      const compiler = new window.MINDAR.Compiler();
+      const compiler = new mindar.Compiler();
       const compiledData = await compiler.compileImageTargets([image], (progress) => {
         const normalized = progress > 1 ? progress : progress * 100;
         EventBus.emit('mindar:compilation-progress', { progress: Math.round(normalized) });
@@ -158,7 +160,9 @@ class MindARManager {
     const response = await fetch(targetUrl, { cache: 'no-store' });
     if (!response.ok) throw new Error('No se pudo descargar el marcador AR del cuento.');
     const targetBuffer = await response.arrayBuffer();
-    this.controller = new window.MINDAR.Controller({
+    const mindar = this.mindar || await this.ensureEngine();
+    this.mindar = mindar;
+    this.controller = new mindar.Controller({
       inputWidth: this.video.videoWidth,
       inputHeight: this.video.videoHeight,
       maxTrack: 1,
@@ -195,6 +199,10 @@ class MindARManager {
       EventBus.emit('mindar:target-lost', { index: 0 });
       this.startScanFeedbackTimer();
     }
+  }
+
+  ensureEngine() {
+    return ensureMindAR((detail) => EventBus.emit('mindar:engine-state', detail));
   }
 
   setTargetVisible(visible) {

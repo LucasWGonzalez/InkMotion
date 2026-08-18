@@ -138,6 +138,11 @@ class InkMotionApp {
   }
 
   bindTrackingEvents() {
+    EventBus.on('mindar:engine-state', ({ state, attempt, total }) => {
+      if (state === 'ready') this.setBuildState('processing', 'Motor AR conectado · analizando imagen…', 20);
+      else if (state === 'retrying') this.setBuildState('processing', `Conectando con el motor AR · alternativa ${attempt} de ${total}…`, 10);
+      else this.setBuildState('processing', 'Conectando con el motor AR…', 8);
+    });
     EventBus.on('mindar:compilation-progress', ({ progress }) => this.setBuildState('processing', `Compilando marcador AR · ${Math.min(100, progress)}%`, Math.min(100, progress)));
     EventBus.on('mindar:target-found', () => { this.parallax?.onTargetFound(); this.setReaderStatus('Ilustración detectada · AR anclada', 'found'); });
     EventBus.on('mindar:target-lost', () => { this.parallax?.onTargetLost(); this.setReaderStatus('Buscando la ilustración…', 'lost'); });
