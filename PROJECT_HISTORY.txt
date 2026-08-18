@@ -1,0 +1,300 @@
+INKMOTION - REGISTRO GENERAL DEL PROYECTO
+=========================================
+
+Ultima actualizacion: 18 de agosto de 2026
+Repositorio: https://github.com/LucasWGonzalez/InkMotion
+Rama de produccion: master
+Produccion: https://ink-motion-pied.vercel.app
+Panel de autor: https://ink-motion-pied.vercel.app/crear
+
+
+1. VISION DEL PRODUCTO
+----------------------
+
+InkMotion comenzo como un visor WebAR experimental con efecto parallax 2.5D y
+evoluciono hacia "Libros Vivos": una plataforma para que un autor convierta la
+ilustracion de un cuento en una experiencia de realidad aumentada accesible desde
+el navegador del celular.
+
+El flujo buscado es:
+
+1) El autor inicia sesion y sube una ilustracion.
+2) La aplicacion prepara la imagen, genera el target de seguimiento y guarda el
+   cuento con un identificador unico.
+3) InkMotion publica un enlace /ver/:id y un codigo QR descargable.
+4) El lector escanea el QR, habilita la camara y apunta a la pagina fisica.
+5) MindAR reconoce la pagina y fija sobre ella la escena Three.js con profundidad,
+   respiracion y particulas, sin depender de la inclinacion del telefono.
+
+
+2. TECNOLOGIA Y ARQUITECTURA ACTUAL
+-----------------------------------
+
+La implementacion actual es una aplicacion web modular en JavaScript, HTML y CSS.
+No utiliza React ni Tailwind CSS en esta version del repositorio. Esta aclaracion
+es importante para que futuras tareas se integren con la base real del proyecto.
+
+Componentes principales:
+
+- Three.js: render 3D, plano subdividido, shader de profundidad y particulas.
+- MindAR Image Tracking 1.2.5: compilacion del target y anclaje sobre la pagina.
+- Supabase: autenticacion, base de datos y almacenamiento de archivos.
+- Vercel: hosting, rutas limpias y despliegue automatico desde master.
+- JavaScript ES Modules: separacion entre motor AR, procesamiento, datos y UI.
+
+
+3. EVOLUCION CRONOLOGICA DE LAS IMPLEMENTACIONES
+------------------------------------------------
+
+ETAPA 1 - BASE DEL REPOSITORIO
+
+- Se inicializo la aplicacion y se ordeno la estructura publica en public/.
+- Se establecio Vercel como entorno de produccion.
+- Se modularizaron las responsabilidades en core/, ui/, utils/ y services/.
+
+Commit de referencia:
+- bc407c4 - initialize commit
+
+ETAPA 2 - CORRECCION DE CARGA DE IMAGEN EN MOVILES
+
+Problema observado en produccion:
+- Una imagen de 2.96 MB disparaba "Archivo muy grande".
+- La interfaz quedaba negra y solo mostraba el boton "3D Depth".
+
+Solucion aplicada:
+- El limite de entrada se amplio a 25 MB.
+- La imagen se redimensiona en el navegador hasta 1920 px y se comprime como JPEG
+  con calidad aproximada de 0.82 antes de procesarse o subirse.
+- Los errores se muestran dentro de la interfaz sin destruir la escena previa.
+- Se agrego un flujo demo seguro cuando todavia no existe un archivo .mind.
+
+Commit de referencia:
+- ede728a - fix mobile image upload and parallax demo flow
+
+ETAPA 3 - RENDER THREE.JS Y BUCLE DE ANIMACION
+
+- La ilustracion subida se carga como textura de un plano Three.js.
+- Se garantiza el inicio del bucle requestAnimationFrame despues de la carga.
+- Se corrigieron estados que dejaban el canvas congelado o cubierto por overlays.
+- Se adapto el render al cambio de orientacion y tamano de pantalla.
+
+Commit de referencia:
+- b08899e - render uploaded image with Three.js parallax
+
+ETAPA 4 - MOTOR DE PROFUNDIDAD Y ANIMACION "LIBROS VIVOS"
+
+- El plano se subdividio para permitir desplazamiento de malla y UV.
+- Se incorporo un shader que estima relieve a partir de luminancia y gradientes de
+  la ilustracion, logrando un efecto 2.5D mas rico que mover la foto completa.
+- Se agrego un ciclo procedural de cinco segundos con respiracion/zoom organico,
+  destellos y particulas sutiles.
+- Se creo la vista previa de producto con controles para alternar entre el efecto
+  3D y la camara.
+
+Commit de referencia:
+- c0fff74 - build automatic living-book AR preview
+
+ETAPA 5 - WORLD-LOCKING CON MINDAR
+
+Problema anterior:
+- DeviceMotion controlaba el movimiento principal y la imagen parecia flotar o
+  temblar al inclinar el telefono.
+
+Solucion aplicada:
+- Se deshabilito el giroscopio como controlador principal de la malla.
+- El contenido se conecta al anchor de MindAR.
+- targetFound hace visible y activa el contenido sobre el marcador.
+- targetLost actualiza el estado y oculta suavemente la experiencia.
+- El shader conserva la profundidad usando la relacion entre camara y objeto
+  detectado, mientras la posicion espacial proviene del tracking de imagen.
+
+Commit de referencia:
+- 1c1156a - anchor living-book effects to MindAR targets
+
+ETAPA 6 - DIAGNOSTICO Y TOLERANCIA DE TRACKING
+
+- Se agregaron estados visuales de compilacion, escaneo, target detectado y target
+  perdido, con texto y color visibles en la pantalla del lector.
+- La imagen se analiza por contraste, bordes y cantidad de detalles utiles.
+- Si el target es debil, el autor recibe un mensaje explicativo en lugar de una
+  falla silenciosa.
+- Se ajustaron parametros de camara y tracking para tolerar mejor cambios de luz,
+  distancia y pequenas perdidas temporales del marcador.
+
+Commit de referencia:
+- 1de854c - add MindAR tracking diagnostics and tolerance
+
+ETAPA 7 - ROLES, RUTAS Y PERSISTENCIA
+
+Se separaron dos experiencias:
+
+- /crear: panel del autor para autenticarse, subir, compilar, guardar y publicar.
+- /ver/:id: lector minimalista, sin controles de edicion, dedicado a la camara y
+  al reconocimiento del cuento indicado por el ID.
+
+Tambien se incorporaron:
+
+- Redireccion de la raiz hacia /crear.
+- Rewrites en server.js y vercel.json para soportar rutas directas.
+- Generacion de UUID para cada cuento.
+- Guardado de imagen procesada, target .mind y configuracion visual.
+- Carga del cuento por ID desde la ruta publica.
+
+Commit de referencia:
+- 69293fe - separate author and reader routes with persistent AR stories
+
+ETAPA 8 - SUPABASE
+
+- Se creo el proyecto Supabase de InkMotion en la region sa-east-1.
+- Se configuro autenticacion por enlace magico.
+- Site URL: https://ink-motion-pied.vercel.app
+- Redirect URL: https://ink-motion-pied.vercel.app/crear
+- Se creo la tabla stories con UUID, autor, titulo, rutas de imagen/target,
+  configuracion 3D y fecha de creacion.
+- Se creo el bucket stories.
+- Se aplicaron politicas RLS: lectura publica de cuentos publicados y escritura
+  limitada al autor autenticado.
+- La clave publica del cliente puede usarse en el navegador gracias a RLS; nunca
+  se debe exponer una service role key.
+
+La compilacion del target se realiza una sola vez en el panel del autor. El lector
+descarga el .mind ya generado, reduciendo espera y consumo en cada apertura.
+
+ETAPA 9 - CARGADOR RESILIENTE DEL COMPILADOR MINDAR
+
+Problema observado:
+- /crear mostraba "No se pudo cargar el compilador MindAR".
+- El build de MindAR era tratado como script clasico aunque el recurso era ESM, o
+  la CDN podia demorar/fallar antes de exponer MINDAR.IMAGE.Compiler.
+
+Solucion aplicada:
+- Se creo un cargador dinamico que prueba fuentes compatibles de jsDelivr, esm.sh
+  y unpkg.
+- Se valida expresamente que el namespace del compilador este disponible.
+- Mientras conecta, la UI muestra "Conectando con el motor AR...".
+- Una demora externa ya no se convierte inmediatamente en un error definitivo.
+
+Commit de referencia:
+- 1a33234 - fix resilient MindAR compiler loading
+
+ETAPA 10 - CODIGO QR PARA PUBLICACION IMPRESA
+
+- El panel /crear genera automaticamente un QR despues de publicar un cuento.
+- El QR apunta a https://ink-motion-pied.vercel.app/ver/{storyId}.
+- Se usa qrcode 1.5.4 cargado en el cliente con fallback de CDN.
+- El codigo utiliza correccion de errores alta (nivel H), margen apto para impresion
+  y salida PNG de 1024 x 1024 pixeles.
+- El boton "Descargar QR - PNG" guarda el archivo con un nombre derivado del cuento.
+- Una falla puntual del generador QR no invalida ni bloquea la publicacion.
+
+Esta funcionalidad se incorpora en la version publicada junto con este registro.
+
+
+4. FLUJO ACTUAL DEL AUTOR
+-------------------------
+
+1) Abre /crear.
+2) Solicita el enlace magico e inicia sesion con Supabase Auth.
+3) Selecciona una imagen de hasta 25 MB.
+4) InkMotion analiza calidad de tracking y optimiza la imagen.
+5) El compilador MindAR crea el archivo .mind en el navegador.
+6) Se suben la imagen y el target al bucket stories.
+7) Se inserta el registro del cuento en la tabla stories.
+8) La interfaz devuelve el enlace publico /ver/:id.
+9) Se renderiza el QR y el autor puede descargarlo como PNG para imprenta.
+
+
+5. FLUJO ACTUAL DEL LECTOR
+--------------------------
+
+1) Escanea el QR o abre /ver/:id.
+2) InkMotion consulta el cuento por ID.
+3) Descarga la ilustracion y el target .mind ya compilado.
+4) Solicita permiso de camara.
+5) Muestra un indicador mientras busca la pagina.
+6) Cuando MindAR detecta el target, la escena queda anclada al papel.
+7) Three.js renderiza profundidad, respiracion y particulas.
+8) Si se pierde el target, el indicador lo informa y la app vuelve a escanear.
+
+
+6. ARCHIVOS PRINCIPALES
+-----------------------
+
+- public/index.html: estructura de /crear y /ver/:id.
+- public/app.js: routing, estados de UI y coordinacion del flujo completo.
+- public/core/ImageProcessor.js: validacion, analisis y compresion de imagenes.
+- public/core/MindARLoader.js: carga robusta del runtime/compilador MindAR.
+- public/core/MindARManager.js: ciclo de camara, anchors y eventos de tracking.
+- public/core/ParallaxEngine.js: escena Three.js, shader, profundidad y animacion.
+- public/services/ProjectStore.js: autenticacion y persistencia con Supabase.
+- public/utils/QRGenerator.js: generacion y render del QR descargable.
+- public/css/routes.css: estilos responsivos de autor, lector, publicacion y QR.
+- server.js y vercel.json: entrega de estaticos y rewrites de rutas.
+- supabase/migrations/: esquema, bucket y politicas de seguridad.
+
+
+7. VALIDACIONES REALIZADAS
+--------------------------
+
+- Comprobacion de sintaxis de los modulos JavaScript modificados.
+- Auditoria de IDs usados por app.js contra los elementos presentes en el HTML.
+- Comprobacion de IDs HTML duplicados.
+- Verificacion del flujo de error para no dejar la pantalla negra.
+- Verificacion de rutas /crear y /ver/:id en Vercel.
+- Revision de politicas RLS y avisos de seguridad de Supabase.
+- Verificacion de que el QR se genera desde la URL publica real y exporta PNG.
+
+Cada despliegue debe cerrarse con una prueba real en celular porque permisos de
+camara, calidad optica, iluminacion y navegador no se reproducen completamente en
+una prueba de escritorio.
+
+
+8. PRUEBAS RECOMENDADAS DESPUES DE ESTE DESPLIEGUE
+--------------------------------------------------
+
+1) Abrir /crear en el celular y completar el inicio por enlace magico.
+2) Publicar una imagen con buen contraste y detalles no repetitivos.
+3) Confirmar que aparece el enlace publico y el QR.
+4) Descargar el PNG y escanearlo desde otro telefono.
+5) Abrir /ver/:id, habilitar camara y apuntar a la pagina impresa o a una pantalla.
+6) Comprobar los estados "escaneando", "detectado" y "target perdido".
+7) Mover el telefono alrededor de la pagina: el contenido debe permanecer anclado.
+8) Repetir con poca luz y a varias distancias.
+
+
+9. PROXIMOS PASOS POSIBLES
+--------------------------
+
+- Panel con listado, edicion, despublicacion y borrado de cuentos del autor.
+- Metricas anonimas de aperturas, detecciones y tiempo de experiencia.
+- Mapas de profundidad de mayor calidad generados por un servicio dedicado.
+- Plantillas de animacion seleccionables por tipo de cuento.
+- Guia de impresion con tamano minimo, zona silenciosa y prueba del QR.
+- Branding por editorial y ficha informativa del cuento.
+- Pruebas automatizadas end-to-end y matriz de navegadores moviles.
+- Estrategia de cache/PWA para mejorar aperturas con conectividad limitada.
+
+
+10. HISTORIAL DE COMMITS PRINCIPALES
+------------------------------------
+
+- bc407c4  initialize commit
+- ede728a  fix mobile image upload and parallax demo flow
+- b08899e  render uploaded image with Three.js parallax
+- c0fff74  build automatic living-book AR preview
+- 1c1156a  anchor living-book effects to MindAR targets
+- 1de854c  add MindAR tracking diagnostics and tolerance
+- 69293fe  separate author and reader routes with persistent AR stories
+- 1a33234  fix resilient MindAR compiler loading
+- Version actual: QR descargable y este registro integral del proyecto.
+
+
+NOTAS DE MANTENIMIENTO
+----------------------
+
+- La rama productiva del repositorio es master.
+- Los cambios en master disparan el despliegue automatico de Vercel.
+- No guardar claves privadas, service role keys ni credenciales en este archivo.
+- Conservar este documento actualizado en cada cambio funcional importante.
+
+FIN DEL REGISTRO
