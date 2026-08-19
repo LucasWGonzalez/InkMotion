@@ -303,3 +303,5 @@ FIN DEL REGISTRO
 - El UUID y la URL pública se reservan antes de publicar para integrar el QR real en la lámina.
 - MindAR compila la lámina completa como target; la configuración conserva el rectángulo de la ilustración para alinear el efecto 2.5D dentro del marco.
 - El autor recibe un único archivo InkMotion_Lamina_Final.pdf y una vista previa de la lámina publicada.
+2026-08-19 — Firma del creador
+- Se añadió un footer global y adaptable con la firma “Creado por Lic. Lucas Walter González” y enlace seguro a su perfil de LinkedIn.
