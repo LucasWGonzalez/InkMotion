@@ -314,3 +314,5 @@ FIN DEL REGISTRO
 2026-08-19 — Corrección crítica del input de cámara MindAR
 - Se sincronizan video.width/video.height con video.videoWidth/video.videoHeight antes de crear el Controller, igual que en el wrapper oficial de MindAR 1.2.5. El detector ya recibe frames con las dimensiones reales.
 - Se fija interestedTargetIndex = 0, se valida que el .mind tenga un único target y se registran targetFound, targetLost, actividad del bucle, errores asíncronos y pérdida/restauración de WebGL.
+2026-08-19 — Terminología visual más amplia
+- La interfaz conserva “Subir ilustración” y reemplaza las referencias visibles a “cuento/libro” por “obra”, para incluir arte visual, cómics, portadas e ilustración editorial.

@@ -1,6 +1,6 @@
 .three-parallax-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; touch-action: none; transition: opacity .25s ease; }
 #ar-overlay::before {
-  content: 'Subí una ilustración para crear tu Cuento Vivo';
+  content: 'Subí una ilustración para crear tu Obra Viva';
   position: absolute; z-index: 1; left: 50%; top: 44%; width: min(76vw, 420px); padding: 34px 18px;
   transform: translate(-50%, -50%); border: 1px dashed rgba(255,255,255,.34); border-radius: 18px;
   background: rgba(10,10,18,.34); color: rgba(255,255,255,.8); text-align: center; font-size: 14px;

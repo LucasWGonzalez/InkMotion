@@ -167,9 +167,9 @@ class InkMotionApp {
     this.clearRetry();
     const button = document.getElementById('btn-publish');
     const form = document.getElementById('publish-form');
-    const title = new FormData(form).get('title')?.toString().trim() || 'Cuento sin título';
+    const title = new FormData(form).get('title')?.toString().trim() || 'Obra sin título';
     button.disabled = true;
-    this.setBuildState('publishing', 'Publicando el cuento y su experiencia AR…', 100);
+    this.setBuildState('publishing', 'Publicando la obra y su experiencia AR…', 100);
     try {
       const projectId = this.pendingProject.id || crypto.randomUUID();
       this.pendingProject.id = projectId;
@@ -188,7 +188,7 @@ class InkMotionApp {
       this.publishedTitle = title;
       await this.prepareSheetResult(sheet.canvas);
       document.getElementById('publish-result').hidden = false;
-      this.setBuildState('published', 'Cuento publicado correctamente.', 100);
+      this.setBuildState('published', 'Obra publicada correctamente.', 100);
     } catch (error) {
       console.error('[InkMotion] No se pudo publicar el proyecto', {
         message: error?.message,
@@ -272,7 +272,7 @@ class InkMotionApp {
     } catch (error) {
       canvas.hidden = true;
       canvasWrap.hidden = true;
-      status.textContent = 'El cuento fue publicado, pero no se pudo preparar la vista de la lámina.';
+      status.textContent = 'La obra fue publicada, pero no se pudo preparar la vista de la lámina.';
       console.error(error);
     }
   }
@@ -298,10 +298,10 @@ class InkMotionApp {
   async startReader(id) {
     document.body.dataset.route = 'reader';
     document.getElementById('reader-view').hidden = false;
-    this.setReaderStatus('Cargando cuento…', 'loading');
+    this.setReaderStatus('Cargando obra…', 'loading');
     try {
       const project = await this.store.getProject(id);
-      if (!project) return this.showFatal('Este cuento no existe o todavía no fue publicado.');
+      if (!project) return this.showFatal('Esta obra no existe o todavía no fue publicada.');
       document.title = `${project.title} · InkMotion`;
       document.getElementById('reader-title').textContent = project.title;
       document.getElementById('info-title').textContent = project.title;
@@ -317,7 +317,7 @@ class InkMotionApp {
       this.setReaderStatus('Verificando marcador AR…', 'loading');
       await this.mindAR.setCompiledTarget(project.targetUrl);
       this.setReaderStatus('Buscando ilustración...', 'scanning');
-    } catch (error) { this.showFatal(error.message || 'No se pudo abrir este cuento.'); }
+    } catch (error) { this.showFatal(error.message || 'No se pudo abrir esta obra.'); }
   }
 
   toggleReaderMode() {
