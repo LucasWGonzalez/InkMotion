@@ -157,9 +157,53 @@ class MindARManager {
     if (!this.isRunning) throw new Error('La cámara todavía no está disponible.');
     this.disposeController();
     this.setTargetVisible(false);
-    const response = await fetch(targetUrl, { cache: 'no-store' });
-    if (!response.ok) throw new Error('No se pudo descargar el marcador AR del cuento.');
-    const targetBuffer = await response.arrayBuffer();
+    EventBus.emit('mindar:target-download', { state: 'downloading', url: targetUrl });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    let targetBuffer;
+    try {
+      const response = await fetch(targetUrl, { cache: 'no-store', signal: controller.signal });
+      if (!response.ok) {
+        const error = new Error(`No se pudo descargar el marcador AR (HTTP ${response.status}).`);
+        error.code = response.status === 404 ? 'TARGET_NOT_FOUND' : 'TARGET_DOWNLOAD_ERROR';
+        error.status = response.status;
+        throw error;
+      }
+      targetBuffer = await response.arrayBuffer();
+      if (targetBuffer.byteLength < 100) {
+        const error = new Error('El marcador AR descargado está vacío o incompleto.');
+        error.code = 'INVALID_TARGET_FILE';
+        throw error;
+      }
+      EventBus.emit('mindar:target-download', {
+        state: 'ready',
+        url: response.url,
+        status: response.status,
+        sizeBytes: targetBuffer.byteLength,
+        contentType: response.headers.get('content-type'),
+      });
+      console.info('[InkMotion/MindAR] target.mind descargado', {
+        url: response.url,
+        status: response.status,
+        sizeBytes: targetBuffer.byteLength,
+        contentType: response.headers.get('content-type'),
+      });
+    } catch (error) {
+      const friendly = error?.name === 'AbortError'
+        ? Object.assign(new Error('La descarga del marcador AR tardó demasiado. Verificá tu conexión.'), { code: 'TARGET_DOWNLOAD_TIMEOUT' })
+        : error;
+      console.error('[InkMotion/MindAR] Falló la descarga de target.mind', {
+        url: targetUrl,
+        message: friendly?.message,
+        code: friendly?.code,
+        status: friendly?.status,
+        online: navigator.onLine,
+      }, error);
+      EventBus.emit('mindar:target-download', { state: 'error', url: targetUrl, error: friendly });
+      throw friendly;
+    } finally {
+      window.clearTimeout(timeout);
+    }
     const mindar = this.mindar || await this.ensureEngine();
     this.mindar = mindar;
     this.controller = new mindar.Controller({

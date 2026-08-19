@@ -228,8 +228,9 @@ class InkMotionApp {
       this.mindAR = new MindARManager({ video: '#video-stream' });
       const ready = await this.mindAR.init();
       if (!ready) throw new Error('No se pudo iniciar la cámara. Revisá sus permisos.');
+      this.setReaderStatus('Verificando marcador AR…', 'loading');
       await this.mindAR.setCompiledTarget(project.targetUrl);
-      this.setReaderStatus('Buscando la ilustración…', 'scanning');
+      this.setReaderStatus('Buscando ilustración...', 'scanning');
     } catch (error) { this.showFatal(error.message || 'No se pudo abrir este cuento.'); }
   }
 
@@ -246,11 +247,16 @@ class InkMotionApp {
       else this.setBuildState('processing', 'Conectando con el motor AR…', 8);
     });
     EventBus.on('mindar:compilation-progress', ({ progress }) => this.setBuildState('processing', `Compilando marcador AR · ${Math.min(100, progress)}%`, Math.min(100, progress)));
-    EventBus.on('mindar:target-found', () => { this.parallax?.onTargetFound(); this.setReaderStatus('Ilustración detectada · AR anclada', 'found'); });
-    EventBus.on('mindar:target-lost', () => { this.parallax?.onTargetLost(); this.setReaderStatus('Buscando la ilustración…', 'lost'); });
+    EventBus.on('mindar:target-found', () => { this.parallax?.onTargetFound(); this.setReaderStatus('¡Ilustración detectada!', 'found'); });
+    EventBus.on('mindar:target-lost', () => { this.parallax?.onTargetLost(); this.setReaderStatus('Buscando ilustración...', 'lost'); });
     EventBus.on('mindar:target-update', (data) => this.parallax?.updateWorldAnchor(data));
     EventBus.on('mindar:projection-ready', (data) => { this.parallax?.setProjectionMatrix(data.projectionMatrix); this.parallax?.setVideoViewport(data); });
     EventBus.on('mindar:video-ready', (data) => this.parallax?.setVideoViewport(data));
+    EventBus.on('mindar:target-download', ({ state, error }) => {
+      if (state === 'downloading') this.setReaderStatus('Descargando marcador AR…', 'loading');
+      else if (state === 'ready') this.setReaderStatus('Marcador listo · buscando ilustración...', 'scanning');
+      else if (state === 'error') this.setReaderStatus(error?.message || 'No se pudo descargar el marcador AR.', 'error');
+    });
     EventBus.on('mindar:scan-timeout', ({ message }) => this.setReaderStatus(message, 'warning'));
   }
 
