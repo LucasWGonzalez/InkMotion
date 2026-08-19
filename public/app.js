@@ -105,10 +105,24 @@ class InkMotionApp {
       document.getElementById('publish-result').hidden = false;
       this.setBuildState('published', 'Cuento publicado correctamente.', 100);
     } catch (error) {
+      console.error('[InkMotion] No se pudo publicar el proyecto', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        status: error?.status || error?.statusCode,
+        imageSizeBytes: this.pendingProject?.imageBlob?.size,
+        targetSizeBytes: this.pendingProject?.targetBlob?.size,
+        online: navigator.onLine,
+      }, error);
       const message = this.errorMessage(error, 'No se pudo publicar. Intentá nuevamente.');
       this.setBuildState('error', message, 0);
       if (this.isNetworkError(error)) this.offerRetry('publish');
       button.disabled = false;
+      if (error?.code === 'AUTH_SESSION_EXPIRED') {
+        document.getElementById('auth-status').textContent = message;
+        this.renderAuthorSession(null);
+      }
     }
   }
 
