@@ -114,7 +114,7 @@ class ProjectStore {
     } catch (error) { throw normalizeNetworkError(error); }
   }
 
-  async saveProject({ title, imageBlob, targetBlob, config }) {
+  async saveProject({ id: reservedId, title, imageBlob, targetBlob, config }) {
     const session = await this.requireActiveSession();
     const validateBlob = (label, blob, expectedType) => {
       if (!(blob instanceof Blob) || blob.size <= 0) {
@@ -132,7 +132,10 @@ class ProjectStore {
     };
     const imageFile = validateBlob('La imagen optimizada', imageBlob, 'image/jpeg');
     const targetFile = validateBlob('El archivo .mind', targetBlob, 'application/octet-stream');
-    const id = crypto.randomUUID();
+    const id = reservedId || crypto.randomUUID();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      throw new Error('El identificador reservado del proyecto no es válido.');
+    }
     const root = `${session.user.id}/${id}`;
     const imagePath = `${root}/cover.jpg`;
     const targetPath = `${root}/target.mind`;

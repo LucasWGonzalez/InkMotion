@@ -26,12 +26,12 @@ async function loadLibrary() {
   catch (error) { libraryPromise = null; throw error; }
 }
 
-export async function renderStoryQR(canvas, publicUrl) {
+export async function renderStoryQR(canvas, publicUrl, options = {}) {
   const QRCode = await loadLibrary();
   await QRCode.toCanvas(canvas, publicUrl, {
     errorCorrectionLevel: 'H',
-    width: 1024,
-    margin: 4,
+    width: options.width || 1024,
+    margin: options.margin ?? 4,
     color: { dark: '#08080DFF', light: '#FFFFFFFF' },
   });
   return canvas.toDataURL('image/png');

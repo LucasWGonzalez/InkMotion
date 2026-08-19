@@ -76,8 +76,11 @@ class ParallaxEngine {
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
     const aspect = THREE.MathUtils.clamp(width / height, 0.2, 5);
-    const planeWidth = 1;
-    const planeHeight = 1 / aspect;
+    const contentRect = this.config.contentRect;
+    const planeWidth = contentRect?.width || 1;
+    const planeHeight = contentRect?.height && contentRect?.targetAspect
+      ? contentRect.height * contentRect.targetAspect
+      : 1 / aspect;
 
     const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight, 80, 60);
     this.storyMaterial = this.createDepthMaterial(texture);
@@ -91,7 +94,11 @@ class ParallaxEngine {
 
     this.particles = this.createMagicParticles({ width: planeWidth, height: planeHeight });
     this.storyGroup.add(this.frameMesh, this.imageMesh, this.particles);
-    this.storyGroup.position.set(0, 0, 0);
+    const offsetX = contentRect ? contentRect.x + contentRect.width / 2 - 0.5 : 0;
+    const offsetY = contentRect
+      ? (0.5 - contentRect.y - contentRect.height / 2) * contentRect.targetAspect
+      : 0;
+    this.storyGroup.position.set(offsetX, offsetY, 0);
     this.storyGroup.rotation.set(0, 0, 0);
     this.storyGroup.scale.setScalar(1);
     this.anchorGroup.visible = false;

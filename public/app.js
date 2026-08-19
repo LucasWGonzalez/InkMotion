@@ -3,7 +3,7 @@ import ParallaxEngine from './core/ParallaxEngine.js';
 import ImageProcessor from './core/ImageProcessor.js';
 import ProjectStore from './services/ProjectStore.js';
 import EventBus from './utils/EventBus.js';
-import { renderStoryQR } from './utils/QRGenerator.js';
+import MasterSheetGenerator from './core/MasterSheetGenerator.js';
 
 const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
 const OAUTH_DRAFT_DB = 'inkmotion-oauth-draft';
@@ -31,6 +31,7 @@ class InkMotionApp {
   constructor() {
     this.store = new ProjectStore();
     this.processor = new ImageProcessor({ maxFileSize: 25 * 1024 * 1024, targetQuality: 0.82 });
+    this.sheetGenerator = new MasterSheetGenerator();
     this.pendingProject = null;
     this.lastSelectedFile = null;
     this.retryAction = null;
@@ -56,7 +57,7 @@ class InkMotionApp {
     document.getElementById('story-file').addEventListener('change', (event) => this.prepareStory(event));
     document.getElementById('publish-form').addEventListener('submit', (event) => this.publishStory(event));
     document.getElementById('btn-copy-link').addEventListener('click', () => this.copyPublishedLink());
-    document.getElementById('btn-download-qr').addEventListener('click', () => this.downloadQR());
+    document.getElementById('btn-download-sheet').addEventListener('click', () => this.downloadMasterSheet());
     document.getElementById('btn-retry').addEventListener('click', () => this.retryLastAction());
     const session = await this.store.getSession();
     this.renderAuthorSession(session);
@@ -106,9 +107,10 @@ class InkMotionApp {
         return request;
       });
       if (!draft || Date.now() - draft.savedAt > 2 * 60 * 60 * 1000) return;
-      this.pendingProject = { imageBlob: draft.imageBlob, targetBlob: draft.targetBlob };
+      const imageUrl = URL.createObjectURL(draft.imageBlob);
+      this.pendingProject = { id: draft.id, imageBlob: draft.imageBlob, imageUrl };
       document.getElementById('story-title').value = draft.title || '';
-      document.getElementById('author-preview').src = URL.createObjectURL(draft.imageBlob);
+      document.getElementById('author-preview').src = imageUrl;
       document.getElementById('preview-wrap').hidden = false;
       document.getElementById('btn-publish').disabled = false;
       this.setBuildState('ready', 'Proyecto recuperado después de iniciar sesión.', 100);
@@ -127,9 +129,8 @@ class InkMotionApp {
       const processed = await this.processor.processImageFile(file, `story-${Date.now()}`);
       document.getElementById('author-preview').src = processed.url;
       document.getElementById('preview-wrap').hidden = false;
-      const compiled = await new MindARManager().compileTarget(processed.url);
-      this.pendingProject = { imageBlob: processed.blob, targetBlob: compiled.blob };
-      this.setBuildState('ready', `Target listo · ${compiled.featureCount} puntos visuales`, 100);
+      this.pendingProject = { imageBlob: processed.blob, imageUrl: processed.url };
+      this.setBuildState('ready', 'Ilustración lista para crear la lámina maestra.', 100);
       publish.disabled = false;
     } catch (error) {
       this.pendingProject = null;
@@ -151,12 +152,22 @@ class InkMotionApp {
     button.disabled = true;
     this.setBuildState('publishing', 'Publicando el cuento y su experiencia AR…', 100);
     try {
-      const project = await this.store.saveProject({ title, ...this.pendingProject, config: { depthStrength: 0.08, animation: 'magic-breathe', loopSeconds: 5, anchor: 'mindar' } });
-      const url = `${window.location.origin}/ver/${project.id}`;
+      const projectId = this.pendingProject.id || crypto.randomUUID();
+      this.pendingProject.id = projectId;
+      const url = `${window.location.origin}/ver/${projectId}`;
+      this.setBuildState('publishing', 'Componiendo lámina maestra a 300 DPI…', 20);
+      const sheet = await this.sheetGenerator.compose({ illustrationUrl: this.pendingProject.imageUrl, publicUrl: url, title });
+      this.setBuildState('publishing', 'Compilando la lámina completa como marcador AR…', 45);
+      const compiled = await new MindARManager().compileTarget(sheet.imageUrl);
+      this.setBuildState('publishing', 'Preparando PDF de impresión…', 75);
+      const pdfBlob = await this.sheetGenerator.createPdf(sheet.jpegDataUrl);
+      const config = { depthStrength: 0.08, animation: 'magic-breathe', loopSeconds: 5, anchor: 'mindar', contentRect: sheet.contentRect, sheetDpi: sheet.dpi };
+      const project = await this.store.saveProject({ id: projectId, title, imageBlob: this.pendingProject.imageBlob, targetBlob: compiled.blob, config });
+      this.masterSheetPdfUrl = URL.createObjectURL(pdfBlob);
       document.getElementById('public-link').value = url;
       document.getElementById('btn-open-story').href = url;
       this.publishedTitle = title;
-      await this.prepareQR(url);
+      await this.prepareSheetResult(sheet.canvas);
       document.getElementById('publish-result').hidden = false;
       this.setBuildState('published', 'Cuento publicado correctamente.', 100);
     } catch (error) {
@@ -224,33 +235,34 @@ class InkMotionApp {
     document.getElementById('btn-copy-link').textContent = 'Copiado';
   }
 
-  async prepareQR(publicUrl) {
+  async prepareSheetResult(sheetCanvas) {
     const canvas = document.getElementById('story-qr');
     const canvasWrap = document.getElementById('qr-canvas-wrap');
     const status = document.getElementById('qr-status');
-    const download = document.getElementById('btn-download-qr');
-    status.textContent = 'Generando código QR…';
+    const download = document.getElementById('btn-download-sheet');
+    status.textContent = 'Preparando la lámina final…';
     download.disabled = true;
     try {
-      this.qrDataUrl = await renderStoryQR(canvas, publicUrl);
+      canvas.width = sheetCanvas.width;
+      canvas.height = sheetCanvas.height;
+      canvas.getContext('2d').drawImage(sheetCanvas, 0, 0);
       canvasWrap.hidden = false;
       canvas.hidden = false;
-      status.textContent = 'QR listo para impresión · PNG de 1024 × 1024 px';
+      status.textContent = 'Lámina generada: tu ilustración, el marco de anclaje AR y el acceso directo integrados en un solo diseño listo para imprimir.';
       download.disabled = false;
     } catch (error) {
       canvas.hidden = true;
       canvasWrap.hidden = true;
-      status.textContent = 'El cuento fue publicado, pero no se pudo generar el QR. Recargá e intentá nuevamente.';
+      status.textContent = 'El cuento fue publicado, pero no se pudo preparar la vista de la lámina.';
       console.error(error);
     }
   }
 
-  downloadQR() {
-    if (!this.qrDataUrl) return;
-    const slug = (this.publishedTitle || 'cuento-ar').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cuento-ar';
+  downloadMasterSheet() {
+    if (!this.masterSheetPdfUrl) return;
     const link = document.createElement('a');
-    link.href = this.qrDataUrl;
-    link.download = `inkmotion-${slug}-qr.png`;
+    link.href = this.masterSheetPdfUrl;
+    link.download = 'InkMotion_Lamina_Final.pdf';
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -277,7 +289,7 @@ class InkMotionApp {
       document.getElementById('btn-info').addEventListener('click', () => document.getElementById('story-info').showModal());
       document.getElementById('btn-close-info').addEventListener('click', () => document.getElementById('story-info').close());
       document.getElementById('btn-camera-mode').addEventListener('click', () => this.toggleReaderMode());
-      this.parallax = new ParallaxEngine({ container: '#ar-overlay', depthStrength: Number(project.config?.depthStrength) || 0.08 });
+      this.parallax = new ParallaxEngine({ container: '#ar-overlay', depthStrength: Number(project.config?.depthStrength) || 0.08, contentRect: project.config?.contentRect });
       await this.parallax.init();
       await this.parallax.setTargetImage(project.imageUrl);
       this.mindAR = new MindARManager({ video: '#video-stream' });

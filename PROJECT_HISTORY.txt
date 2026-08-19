@@ -298,3 +298,8 @@ NOTAS DE MANTENIMIENTO
 - Conservar este documento actualizado en cada cambio funcional importante.
 
 FIN DEL REGISTRO
+2026-08-19 — Lámina Maestra InkMotion
+- La exportación final ahora compone una hoja A4 de 2480 × 3508 px a 300 DPI con ilustración central, marco geométrico de alto contraste y QR de acceso.
+- El UUID y la URL pública se reservan antes de publicar para integrar el QR real en la lámina.
+- MindAR compila la lámina completa como target; la configuración conserva el rectángulo de la ilustración para alinear el efecto 2.5D dentro del marco.
+- El autor recibe un único archivo InkMotion_Lamina_Final.pdf y una vista previa de la lámina publicada.
