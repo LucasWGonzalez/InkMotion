@@ -6,6 +6,26 @@ import EventBus from './utils/EventBus.js';
 import { renderStoryQR } from './utils/QRGenerator.js';
 
 const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
+const OAUTH_DRAFT_DB = 'inkmotion-oauth-draft';
+
+function accessOAuthDraft(action) {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) { resolve(null); return; }
+    const request = indexedDB.open(OAUTH_DRAFT_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('drafts');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction('drafts', 'readwrite');
+      const store = transaction.objectStore('drafts');
+      let result = null;
+      try { result = action(store); }
+      catch (error) { database.close(); reject(error); return; }
+      transaction.oncomplete = () => { database.close(); resolve(result?.result ?? result); };
+      transaction.onerror = () => { database.close(); reject(transaction.error); };
+    };
+  });
+}
 
 class InkMotionApp {
   constructor() {
@@ -31,7 +51,7 @@ class InkMotionApp {
   async startAuthor() {
     document.body.dataset.route = 'author';
     document.getElementById('author-view').hidden = false;
-    document.getElementById('auth-form').addEventListener('submit', (event) => this.requestAccess(event));
+    document.getElementById('btn-google-auth').addEventListener('click', () => this.loginWithGoogle());
     document.getElementById('btn-sign-out').addEventListener('click', async () => { await this.store.signOut(); window.location.reload(); });
     document.getElementById('story-file').addEventListener('change', (event) => this.prepareStory(event));
     document.getElementById('publish-form').addEventListener('submit', (event) => this.publishStory(event));
@@ -40,7 +60,11 @@ class InkMotionApp {
     document.getElementById('btn-retry').addEventListener('click', () => this.retryLastAction());
     const session = await this.store.getSession();
     this.renderAuthorSession(session);
-    this.store.onAuthChange((nextSession) => this.renderAuthorSession(nextSession));
+    if (session) await this.restoreOAuthDraft();
+    this.store.onAuthChange(async (nextSession) => {
+      this.renderAuthorSession(nextSession);
+      if (nextSession) await this.restoreOAuthDraft();
+    });
   }
 
   renderAuthorSession(session) {
@@ -49,15 +73,46 @@ class InkMotionApp {
     if (session) document.getElementById('author-email').textContent = session.user.email || 'Autor';
   }
 
-  async requestAccess(event) {
-    event.preventDefault();
-    const email = new FormData(event.currentTarget).get('email')?.toString().trim();
+  async loginWithGoogle() {
+    const button = document.getElementById('btn-google-auth');
     const status = document.getElementById('auth-status');
     try {
-      status.textContent = 'Enviando acceso seguro…';
-      await this.store.sendMagicLink(email);
-      status.textContent = 'Revisá tu correo y abrí el enlace para entrar al panel.';
-    } catch (error) { status.textContent = error.message; }
+      button.disabled = true;
+      status.textContent = 'Conectando con Google…';
+      await this.persistOAuthDraft();
+      await this.store.signInWithGoogle();
+    } catch (error) {
+      console.error('Error en Google Auth:', error?.message, error);
+      status.textContent = this.errorMessage(error, 'No se pudo iniciar sesión con Google. Intentá nuevamente.');
+      button.disabled = false;
+    }
+  }
+
+  async persistOAuthDraft() {
+    if (!this.pendingProject) return;
+    const title = document.getElementById('story-title')?.value || '';
+    try {
+      await accessOAuthDraft((store) => store.put({ ...this.pendingProject, title, savedAt: Date.now() }, 'current'));
+    } catch (error) { console.warn('No se pudo guardar el proyecto temporal antes de Google OAuth.', error); }
+  }
+
+  async restoreOAuthDraft() {
+    if (this.pendingProject || this.oauthDraftRestored) return;
+    this.oauthDraftRestored = true;
+    try {
+      const draft = await accessOAuthDraft((store) => {
+        const request = store.get('current');
+        request.onsuccess = () => store.delete('current');
+        return request;
+      });
+      if (!draft || Date.now() - draft.savedAt > 2 * 60 * 60 * 1000) return;
+      this.pendingProject = { imageBlob: draft.imageBlob, targetBlob: draft.targetBlob };
+      document.getElementById('story-title').value = draft.title || '';
+      document.getElementById('author-preview').src = URL.createObjectURL(draft.imageBlob);
+      document.getElementById('preview-wrap').hidden = false;
+      document.getElementById('btn-publish').disabled = false;
+      this.setBuildState('ready', 'Proyecto recuperado después de iniciar sesión.', 100);
+    } catch (error) { console.warn('No se pudo recuperar el proyecto temporal de OAuth.', error); }
   }
 
   async prepareStory(eventOrFile) {

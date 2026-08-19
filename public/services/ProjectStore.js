@@ -42,7 +42,14 @@ function normalizeNetworkError(error) {
 
 class ProjectStore {
   constructor() {
-    this.client = createClient(SUPABASE_URL, SUPABASE_KEY);
+    this.client = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        flowType: 'pkce',
+        detectSessionInUrl: true,
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
   }
 
   async getSession() {
@@ -82,13 +89,17 @@ class ProjectStore {
     return session;
   }
 
-  async sendMagicLink(email) {
+  async signInWithGoogle() {
     try {
-      const { error } = await this.client.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: `${window.location.origin}/crear` },
+      const { data, error } = await this.client.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/crear`,
+          queryParams: { prompt: 'select_account' },
+        },
       });
       if (error) throw error;
+      return data;
     } catch (error) { throw normalizeNetworkError(error); }
   }
 
