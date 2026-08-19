@@ -6,6 +6,13 @@ const SOURCES = [
 ];
 
 let loadingPromise = null;
+const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
+
+function networkError(cause) {
+  const error = new Error(NETWORK_ERROR_MESSAGE, { cause });
+  error.code = 'NETWORK_ERROR';
+  return error;
+}
 
 function currentApi() {
   const root = window.MINDAR || {};
@@ -14,16 +21,21 @@ function currentApi() {
 }
 
 async function loadFrom(source) {
-  const module = await import(source);
-  const api = {
-    Compiler: module.Compiler || window.MINDAR?.IMAGE?.Compiler || window.MINDAR?.Compiler,
-    Controller: module.Controller || window.MINDAR?.IMAGE?.Controller || window.MINDAR?.Controller,
-    UI: module.UI || window.MINDAR?.IMAGE?.UI || window.MINDAR?.UI,
-  };
-  if (!api.Compiler || !api.Controller) throw new Error('El módulo descargado no expone la API de imagen.');
-  window.MINDAR ||= {};
-  window.MINDAR.IMAGE = { ...(window.MINDAR.IMAGE || {}), ...api };
-  return window.MINDAR.IMAGE;
+  try {
+    const module = await import(source);
+    const api = {
+      Compiler: module.Compiler || window.MINDAR?.IMAGE?.Compiler || window.MINDAR?.Compiler,
+      Controller: module.Controller || window.MINDAR?.IMAGE?.Controller || window.MINDAR?.Controller,
+      UI: module.UI || window.MINDAR?.IMAGE?.UI || window.MINDAR?.UI,
+    };
+    if (!api.Compiler || !api.Controller) throw new Error('El módulo descargado no expone la API de imagen.');
+    window.MINDAR ||= {};
+    window.MINDAR.IMAGE = { ...(window.MINDAR.IMAGE || {}), ...api };
+    return window.MINDAR.IMAGE;
+  } catch (error) {
+    console.warn(`No se pudo cargar el recurso MindAR: ${source}`, error);
+    throw error;
+  }
 }
 
 export async function ensureMindAR(onState = () => {}) {
@@ -44,7 +56,7 @@ export async function ensureMindAR(onState = () => {}) {
         console.warn(`MindAR CDN ${index + 1} no disponible`, error);
       }
     }
-    throw new Error(`No se pudo conectar con el motor AR. Revisá tu conexión e intentá nuevamente. ${lastError?.message || ''}`.trim());
+    throw networkError(lastError);
   })();
 
   try { return await loadingPromise; }

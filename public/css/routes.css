@@ -14,4 +14,5 @@ body[data-route="author"] { overflow:auto; background:#0b0b13; }
 .qr-canvas-wrap{display:grid;place-items:center;aspect-ratio:1;padding:8px;border-radius:12px;background:#fff}
 .qr-canvas-wrap canvas{display:block;width:100%!important;height:auto!important;border-radius:4px}
 .qr-copy{display:grid;gap:7px;min-width:0}.qr-copy>strong{font-size:14px;line-height:1.3}.qr-copy p{color:var(--muted);font-size:10px;line-height:1.35}.qr-copy .btn{width:100%;font-size:10px;padding-inline:9px}
+.retry-btn{justify-self:start;padding:5px 0;font-weight:800}.retry-btn:disabled{opacity:.55;cursor:wait}
 @media(max-width:430px){.qr-publish{grid-template-columns:108px 1fr;gap:12px;padding:12px}.qr-copy>strong{font-size:12px}.qr-copy .eyebrow{font-size:8px}}

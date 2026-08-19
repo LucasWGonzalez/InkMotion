@@ -5,11 +5,15 @@ import ProjectStore from './services/ProjectStore.js';
 import EventBus from './utils/EventBus.js';
 import { renderStoryQR } from './utils/QRGenerator.js';
 
+const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
+
 class InkMotionApp {
   constructor() {
     this.store = new ProjectStore();
     this.processor = new ImageProcessor({ maxFileSize: 25 * 1024 * 1024, targetQuality: 0.82 });
     this.pendingProject = null;
+    this.lastSelectedFile = null;
+    this.retryAction = null;
     this.bindTrackingEvents();
     this.start();
   }
@@ -33,6 +37,7 @@ class InkMotionApp {
     document.getElementById('publish-form').addEventListener('submit', (event) => this.publishStory(event));
     document.getElementById('btn-copy-link').addEventListener('click', () => this.copyPublishedLink());
     document.getElementById('btn-download-qr').addEventListener('click', () => this.downloadQR());
+    document.getElementById('btn-retry').addEventListener('click', () => this.retryLastAction());
     const session = await this.store.getSession();
     this.renderAuthorSession(session);
     this.store.onAuthChange((nextSession) => this.renderAuthorSession(nextSession));
@@ -55,9 +60,11 @@ class InkMotionApp {
     } catch (error) { status.textContent = error.message; }
   }
 
-  async prepareStory(event) {
-    const file = event.target.files?.[0];
+  async prepareStory(eventOrFile) {
+    const file = eventOrFile instanceof File ? eventOrFile : eventOrFile?.target?.files?.[0];
     if (!file) return;
+    this.lastSelectedFile = file;
+    this.clearRetry();
     const publish = document.getElementById('btn-publish');
     publish.disabled = true;
     this.setBuildState('processing', 'Optimizando la ilustración…', 15);
@@ -71,15 +78,21 @@ class InkMotionApp {
       publish.disabled = false;
     } catch (error) {
       this.pendingProject = null;
-      this.setBuildState('error', error.message || 'No se pudo procesar esta ilustración.', 0);
-    } finally { event.target.value = ''; }
+      const message = this.errorMessage(error, 'No se pudo procesar esta ilustración.');
+      this.setBuildState('error', message, 0);
+      if (this.isNetworkError(error)) this.offerRetry('prepare');
+    } finally {
+      if (!(eventOrFile instanceof File) && eventOrFile?.target) eventOrFile.target.value = '';
+    }
   }
 
   async publishStory(event) {
-    event.preventDefault();
+    event?.preventDefault();
     if (!this.pendingProject) return;
+    this.clearRetry();
     const button = document.getElementById('btn-publish');
-    const title = new FormData(event.currentTarget).get('title')?.toString().trim() || 'Cuento sin título';
+    const form = document.getElementById('publish-form');
+    const title = new FormData(form).get('title')?.toString().trim() || 'Cuento sin título';
     button.disabled = true;
     this.setBuildState('publishing', 'Publicando el cuento y su experiencia AR…', 100);
     try {
@@ -92,8 +105,47 @@ class InkMotionApp {
       document.getElementById('publish-result').hidden = false;
       this.setBuildState('published', 'Cuento publicado correctamente.', 100);
     } catch (error) {
-      this.setBuildState('error', error.message || 'No se pudo publicar. Intentá nuevamente.', 0);
+      const message = this.errorMessage(error, 'No se pudo publicar. Intentá nuevamente.');
+      this.setBuildState('error', message, 0);
+      if (this.isNetworkError(error)) this.offerRetry('publish');
       button.disabled = false;
+    }
+  }
+
+  isNetworkError(error) {
+    const message = `${error?.message || error || ''}`;
+    return error?.code === 'NETWORK_ERROR' || /failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(message);
+  }
+
+  errorMessage(error, fallback) {
+    return this.isNetworkError(error) ? NETWORK_ERROR_MESSAGE : (error?.message || fallback);
+  }
+
+  offerRetry(action) {
+    this.retryAction = action;
+    const button = document.getElementById('btn-retry');
+    button.hidden = false;
+    button.disabled = false;
+  }
+
+  clearRetry() {
+    this.retryAction = null;
+    const button = document.getElementById('btn-retry');
+    if (button) button.hidden = true;
+  }
+
+  async retryLastAction() {
+    const action = this.retryAction;
+    if (!action) return;
+    const button = document.getElementById('btn-retry');
+    button.disabled = true;
+    button.textContent = 'Reintentando…';
+    try {
+      if (action === 'prepare' && this.lastSelectedFile) await this.prepareStory(this.lastSelectedFile);
+      else if (action === 'publish') await this.publishStory();
+    } finally {
+      button.textContent = 'Reintentar';
+      if (!button.hidden) button.disabled = false;
     }
   }
 
