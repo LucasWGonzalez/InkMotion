@@ -46,8 +46,8 @@ function canvasToBlob(canvas, type, quality) {
 }
 
 function drawFiducialCorner(context, x, y, horizontal, vertical, frameWidth) {
-  const arm = frameWidth * 1.65;
-  const thickness = frameWidth * 0.55;
+  const arm = frameWidth * 4.2;
+  const thickness = Math.max(3, frameWidth * 0.8);
   const horizontalX = horizontal > 0 ? x : x - arm;
   const horizontalY = vertical > 0 ? y : y - thickness;
   const verticalX = horizontal > 0 ? x : x - thickness;
@@ -71,30 +71,46 @@ export default class MasterSheetGenerator {
     const output = calculateOutputSize(sourceWidth, sourceHeight);
     const shortest = Math.min(output.width, output.height);
     const unit = shortest / 80;
-    const frameWidth = Math.max(12, Math.round(output.width * 0.04));
-    const quietX = Math.round(output.width * 0.055);
-    const quietY = Math.round(output.height * 0.055);
-    const artInsetX = Math.round(output.width * 0.16);
-    const artInsetY = Math.round(output.height * 0.16);
+    const sideMargin = Math.round(shortest * 0.06);
+    const topMargin = sideMargin;
     const qrSize = Math.round(Math.min(420, Math.max(180, shortest * 0.135)));
+    const bottomMargin = Math.max(Math.round(shortest * 0.18), qrSize + Math.round(unit * 3));
+    const frameWidth = Math.max(5, Math.round(shortest * 0.006));
     const qrCanvas = document.createElement('canvas');
     await renderStoryQR(qrCanvas, publicUrl, { width: qrSize, margin: 3, errorCorrectionLevel: 'M' });
 
     const canvas = document.createElement('canvas');
-    canvas.width = output.width;
-    canvas.height = output.height;
+    canvas.width = output.width + sideMargin * 2;
+    canvas.height = output.height + topMargin + bottomMargin;
     const context = canvas.getContext('2d', { alpha: false });
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = 'high';
-    context.fillStyle = '#fff';
+    context.fillStyle = '#f8f8f6';
     context.fillRect(0, 0, canvas.width, canvas.height);
 
-    const frame = { x: quietX, y: quietY, width: canvas.width - quietX * 2, height: canvas.height - quietY * 2 };
+    const content = {
+      x: sideMargin,
+      y: topMargin,
+      width: output.width,
+      height: output.height,
+    };
+    context.fillStyle = '#fff';
+    context.fillRect(content.x, content.y, content.width, content.height);
+    context.drawImage(illustration, content.x, content.y, content.width, content.height);
+
+    // Reserve enough paspartú for the complete L arms: technical marks never touch the artwork.
+    const frameGap = Math.max(frameWidth * 7, unit * 0.55);
+    const frame = {
+      x: content.x - frameGap,
+      y: content.y - frameGap,
+      width: content.width + frameGap * 2,
+      height: content.height + frameGap * 2,
+    };
     context.strokeStyle = '#08080d';
     context.lineWidth = frameWidth;
     context.strokeRect(frame.x, frame.y, frame.width, frame.height);
     context.fillStyle = '#08080d';
-    const fiducialOffset = frameWidth * 0.45;
+    const fiducialOffset = frameWidth * 1.4;
     const left = frame.x + frameWidth / 2 + fiducialOffset;
     const right = frame.x + frame.width - frameWidth / 2 - fiducialOffset;
     const top = frame.y + frameWidth / 2 + fiducialOffset;
@@ -104,42 +120,28 @@ export default class MasterSheetGenerator {
     drawFiducialCorner(context, left, bottom, 1, -1, frameWidth);
     drawFiducialCorner(context, right, bottom, -1, -1, frameWidth);
 
-    const area = { x: artInsetX, y: artInsetY, width: canvas.width - artInsetX * 2, height: canvas.height - artInsetY * 2 };
-    const scale = Math.min(area.width / sourceWidth, area.height / sourceHeight);
-    const content = {
-      x: Math.round(area.x + (area.width - sourceWidth * scale) / 2),
-      y: Math.round(area.y + (area.height - sourceHeight * scale) / 2),
-      width: Math.round(sourceWidth * scale),
-      height: Math.round(sourceHeight * scale),
-    };
-    context.fillStyle = '#f5f4f8';
-    context.fillRect(area.x - unit * 0.4, area.y - unit * 0.4, area.width + unit * 0.8, area.height + unit * 0.8);
-    context.drawImage(illustration, content.x, content.y, content.width, content.height);
-
-    const panelPadding = unit * 0.62;
+    const panelPadding = unit * 0.7;
     const brandFont = Math.max(26, Math.round(unit * 1.35));
     const detailFont = Math.max(15, Math.round(unit * 0.72));
     const titleFont = Math.max(17, Math.round(unit * 0.82));
-    const brandPanelWidth = Math.min(content.width * 0.58, unit * 42);
-    const brandPanelHeight = unit * 5.8;
-    const brandX = content.x + unit * 0.7;
-    const brandY = content.y + content.height - brandPanelHeight - unit * 0.7;
-    context.fillStyle = 'rgba(255,255,255,.94)';
-    context.fillRect(brandX, brandY, brandPanelWidth, brandPanelHeight);
+    const footerTop = content.y + content.height;
+    const brandX = sideMargin;
+    const brandY = footerTop + panelPadding;
+    const textWidth = Math.max(unit * 18, canvas.width - sideMargin * 2 - qrSize - unit * 3);
     context.fillStyle = '#08080d';
     context.font = `800 ${brandFont}px Arial, sans-serif`;
-    context.fillText('INKMOTION', brandX + panelPadding, brandY + unit * 1.9);
+    context.fillText('INKMOTION', brandX, brandY + unit * 1.45, textWidth);
     context.fillStyle = '#7657ed';
     context.font = `700 ${detailFont}px Arial, sans-serif`;
-    context.fillText('LÁMINA MAESTRA · EXPERIENCIA AR', brandX + panelPadding, brandY + unit * 3.15, brandPanelWidth - panelPadding * 2);
+    context.fillText('LÁMINA MAESTRA · EXPERIENCIA AR', brandX, brandY + unit * 2.8, textWidth);
     context.fillStyle = '#34343d';
     context.font = `500 ${titleFont}px Arial, sans-serif`;
     const safeTitle = `${title}`.slice(0, 72);
-    context.fillText(safeTitle, brandX + panelPadding, brandY + unit * 4.65, brandPanelWidth - panelPadding * 2);
+    context.fillText(safeTitle, brandX, brandY + unit * 4.35, textWidth);
 
     const qr = {
-      x: content.x + content.width - qrSize - unit * 0.7,
-      y: content.y + content.height - qrSize - unit * 0.7,
+      x: canvas.width - sideMargin - qrSize,
+      y: footerTop + Math.max(unit, (bottomMargin - qrSize) / 2),
       size: qrSize,
     };
     context.fillStyle = '#fff';

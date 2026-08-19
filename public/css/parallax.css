@@ -11,3 +11,13 @@
 @media (orientation: landscape) and (max-height: 520px) {
   #ar-overlay::before { top: 40%; width: min(54vw, 380px); padding: 22px 16px; }
 }
+.scan-guide { position:absolute;z-index:4;left:50%;top:50%;width:min(72vw,430px);aspect-ratio:3/4;transform:translate(-50%,-48%);transition:opacity .35s ease,transform .55s cubic-bezier(.2,.8,.2,1);pointer-events:none;filter:drop-shadow(0 0 14px rgba(118,87,237,.2)) }
+.scan-guide i { position:absolute;width:42px;height:42px;border-color:rgba(221,216,255,.9);border-style:solid;animation:guide-pulse 1.8s ease-in-out infinite }
+.scan-guide i:nth-child(1){left:0;top:0;border-width:2px 0 0 2px;border-radius:10px 0 0 0}.scan-guide i:nth-child(2){right:0;top:0;border-width:2px 2px 0 0;border-radius:0 10px 0 0}.scan-guide i:nth-child(3){right:0;bottom:0;border-width:0 2px 2px 0;border-radius:0 0 10px 0}.scan-guide i:nth-child(4){left:0;bottom:0;border-width:0 0 2px 2px;border-radius:0 0 0 10px}
+.scan-guide span { position:absolute;left:8%;right:8%;top:8%;height:1px;background:linear-gradient(90deg,transparent,#a99aff,transparent);box-shadow:0 0 14px #806cf5;animation:scan-line 2.5s ease-in-out infinite }
+.scan-guide b { position:absolute;left:50%;bottom:-42px;transform:translateX(-50%);width:max-content;max-width:90vw;color:rgba(255,255,255,.82);font-size:12px;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 2px 12px #000 }
+.reader-page.target-found .scan-guide { opacity:0;transform:translate(-50%,-48%) scale(.92) }
+@keyframes scan-line { 0%,100%{top:8%;opacity:.25}50%{top:92%;opacity:1} }
+@keyframes guide-pulse { 0%,100%{border-color:rgba(221,216,255,.55)}50%{border-color:#9d87ff} }
+@media (orientation:landscape){.scan-guide{width:min(40vw,360px);aspect-ratio:4/3}}
+@media (prefers-reduced-motion:reduce){.scan-guide i,.scan-guide span{animation:none}}

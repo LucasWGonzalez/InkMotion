@@ -316,3 +316,11 @@ FIN DEL REGISTRO
 - Se fija interestedTargetIndex = 0, se valida que el .mind tenga un único target y se registran targetFound, targetLost, actividad del bucle, errores asíncronos y pérdida/restauración de WebGL.
 2026-08-19 — Terminología visual más amplia
 - La interfaz conserva “Subir ilustración” y reemplaza las referencias visibles a “cuento/libro” por “obra”, para incluir arte visual, cómics, portadas e ilustración editorial.
+2026-08-19 — Paspartú técnico y estabilización AR
+- La Lámina Maestra amplía el lienzo con un paspartú neutro; marco, fiduciales, texto y QR quedan fuera de la ilustración y escalan con sus proporciones reales.
+- El anclaje Three.js interpola posición, rotación y escala con suavizado independiente de FPS para reducir el jitter sin desfasar la experiencia.
+- Las partículas conservan AdditiveBlending, se elevan sobre el relieve y se renderizan sin prueba de profundidad para evitar que desaparezcan dentro de la obra.
+2026-08-19 — Activación visual “La obra cobró vida”
+- La detección despliega progresivamente relieve, escala, brillo y partículas, con un barrido violeta dentro del shader y respuesta háptica breve cuando el dispositivo la admite.
+- El lector suma una guía animada de encuadre y tolera pérdidas de tracking de 400 ms antes de iniciar un desvanecimiento, evitando cortes bruscos por microtemblores.
+- El target .mind inmutable ahora aprovecha la caché del navegador para acelerar aperturas repetidas.

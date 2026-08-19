@@ -339,8 +339,22 @@ class InkMotionApp {
       else this.setBuildState('processing', 'Conectando con el motor AR…', 8);
     });
     EventBus.on('mindar:compilation-progress', ({ progress }) => this.setBuildState('processing', `Compilando marcador AR · ${Math.min(100, progress)}%`, Math.min(100, progress)));
-    EventBus.on('mindar:target-found', () => { this.parallax?.onTargetFound(); this.setReaderStatus('¡Ilustración detectada!', 'found'); });
-    EventBus.on('mindar:target-lost', () => { this.parallax?.onTargetLost(); this.setReaderStatus('Buscando ilustración...', 'lost'); });
+    EventBus.on('mindar:target-found', () => {
+      window.clearTimeout(this.readerLostTimer);
+      this.readerLostTimer = null;
+      this.parallax?.onTargetFound();
+      document.getElementById('reader-view')?.classList.add('target-found');
+      this.setReaderStatus('La obra cobró vida', 'found');
+      navigator.vibrate?.(35);
+    });
+    EventBus.on('mindar:target-lost', () => {
+      window.clearTimeout(this.readerLostTimer);
+      this.readerLostTimer = window.setTimeout(() => {
+        this.parallax?.onTargetLost();
+        document.getElementById('reader-view')?.classList.remove('target-found');
+        this.setReaderStatus('Encuadrá la lámina completa', 'lost');
+      }, 400);
+    });
     EventBus.on('mindar:target-update', (data) => this.parallax?.updateWorldAnchor(data));
     EventBus.on('mindar:projection-ready', (data) => { this.parallax?.setProjectionMatrix(data.projectionMatrix); this.parallax?.setVideoViewport(data); });
     EventBus.on('mindar:video-ready', (data) => this.parallax?.setVideoViewport(data));

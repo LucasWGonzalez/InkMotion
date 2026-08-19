@@ -176,7 +176,7 @@ class MindARManager {
     const timeout = window.setTimeout(() => controller.abort(), 20_000);
     let targetBuffer;
     try {
-      const response = await fetch(targetUrl, { cache: 'no-store', signal: controller.signal });
+      const response = await fetch(targetUrl, { cache: 'force-cache', signal: controller.signal });
       if (!response.ok) {
         const error = new Error(`No se pudo descargar el marcador AR (HTTP ${response.status}).`);
         error.code = response.status === 404 ? 'TARGET_NOT_FOUND' : 'TARGET_DOWNLOAD_ERROR';

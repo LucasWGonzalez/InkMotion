@@ -5,7 +5,7 @@ const LOOP_DURATION = 5000;
 
 class ParallaxEngine {
   constructor(config = {}) {
-    this.config = { container: '#ar-overlay', depthStrength: 0.12, ...config };
+    this.config = { container: '#ar-overlay', depthStrength: 0.12, anchorSmoothing: 0.18, ...config };
     this.container = null;
     this.scene = null;
     this.camera = null;
@@ -24,6 +24,16 @@ class ParallaxEngine {
     this.previewMode = '3d';
     this.clockStart = performance.now();
     this.videoSize = null;
+    this.anchorTargetPosition = new THREE.Vector3();
+    this.anchorTargetQuaternion = new THREE.Quaternion();
+    this.anchorTargetScale = new THREE.Vector3(1, 1, 1);
+    this.anchorCurrentPosition = new THREE.Vector3();
+    this.anchorCurrentQuaternion = new THREE.Quaternion();
+    this.anchorCurrentScale = new THREE.Vector3(1, 1, 1);
+    this.anchorTransformReady = false;
+    this.revealProgress = 0;
+    this.revealTarget = 0;
+    this.lastFrameTime = performance.now();
     this.boundResize = this.handleResize.bind(this);
   }
 
@@ -111,6 +121,8 @@ class ParallaxEngine {
     this.storyGroup.scale.setScalar(1);
     this.anchorGroup.visible = false;
     this.isTargetVisible = false;
+    this.revealProgress = 0;
+    this.revealTarget = 0;
     this.clockStart = performance.now();
     this.container.classList.add('has-target');
     EventBus.emit('parallax:texture-ready', { width, height, anchorMode: 'mindar' });
@@ -123,11 +135,13 @@ class ParallaxEngine {
         uTexture: { value: texture },
         uDepthStrength: { value: this.config.depthStrength },
         uTime: { value: 0 },
+        uReveal: { value: 0 },
       },
       vertexShader: `
         uniform sampler2D uTexture;
         uniform float uDepthStrength;
         uniform float uTime;
+        uniform float uReveal;
         varying vec2 vUv;
         varying float vDepth;
         varying vec3 vViewDirection;
@@ -143,7 +157,7 @@ class ParallaxEngine {
           vDepth = depthAt(uv);
           vec3 displaced = position;
           float organic = sin((uv.x * 3.0 + uv.y * 2.0) * 6.28318 + uTime * 6.28318) * 0.004;
-          displaced.z += (vDepth - 0.45) * uDepthStrength + organic * vDepth;
+          displaced.z += ((vDepth - 0.45) * uDepthStrength + organic * vDepth) * uReveal;
           vec4 viewPosition = modelViewMatrix * vec4(displaced, 1.0);
           vViewDirection = normalize(-viewPosition.xyz);
           gl_Position = projectionMatrix * viewPosition;
@@ -151,6 +165,7 @@ class ParallaxEngine {
       `,
       fragmentShader: `
         uniform sampler2D uTexture;
+        uniform float uReveal;
         varying vec2 vUv;
         varying float vDepth;
         varying vec3 vViewDirection;
@@ -161,9 +176,14 @@ class ParallaxEngine {
           vec2 sampleUv = clamp(vUv + cameraParallax, vec2(0.002), vec2(0.998));
           vec4 color = texture2D(uTexture, sampleUv);
           float light = 0.96 + vDepth * 0.07;
-          gl_FragColor = vec4(color.rgb * light, color.a);
+          float sweepPosition = uReveal * 1.45 - 0.18;
+          float sweep = 1.0 - smoothstep(0.0, 0.075, abs((vUv.x + vUv.y * 0.38) - sweepPosition));
+          vec3 revealGlow = vec3(0.40, 0.29, 0.95) * sweep * 0.34;
+          float alpha = color.a * smoothstep(0.0, 0.16, uReveal);
+          gl_FragColor = vec4(color.rgb * light + revealGlow, alpha);
         }
       `,
+      transparent: true,
     });
   }
 
@@ -186,19 +206,31 @@ class ParallaxEngine {
     const scale = new THREE.Vector3(markerWidth, markerWidth, markerWidth);
     const postMatrix = new THREE.Matrix4().compose(position, new THREE.Quaternion(), scale);
     tracked.multiply(postMatrix);
-    this.anchorGroup.matrix.copy(tracked);
-    this.anchorGroup.matrixWorldNeedsUpdate = true;
+    tracked.decompose(this.anchorTargetPosition, this.anchorTargetQuaternion, this.anchorTargetScale);
+    if (!this.anchorTransformReady) {
+      this.anchorCurrentPosition.copy(this.anchorTargetPosition);
+      this.anchorCurrentQuaternion.copy(this.anchorTargetQuaternion);
+      this.anchorCurrentScale.copy(this.anchorTargetScale);
+      this.anchorGroup.matrix.compose(
+        this.anchorCurrentPosition,
+        this.anchorCurrentQuaternion,
+        this.anchorCurrentScale,
+      );
+      this.anchorGroup.matrixWorldNeedsUpdate = true;
+      this.anchorTransformReady = true;
+    }
   }
 
   onTargetFound() {
     this.isTargetVisible = true;
+    this.revealTarget = 1;
     this.anchorGroup.visible = this.previewMode === '3d' && Boolean(this.imageMesh);
     this.container.classList.add('target-found');
   }
 
   onTargetLost() {
     this.isTargetVisible = false;
-    if (this.anchorGroup) this.anchorGroup.visible = false;
+    this.revealTarget = 0;
     this.container.classList.remove('target-found');
   }
 
@@ -209,7 +241,7 @@ class ParallaxEngine {
     for (let i = 0; i < count; i++) {
       const x = (Math.random() - 0.5) * size.width * 1.05;
       const y = (Math.random() - 0.5) * size.height * 1.05;
-      const z = 0.06 + Math.random() * 0.12;
+      const z = 0.14 + Math.random() * 0.12;
       positions.set([x, y, z], i * 3);
       this.particleBase.push({ x, y, z, phase: Math.random() * Math.PI * 2, radius: 0.008 + Math.random() * 0.014 });
     }
@@ -221,11 +253,15 @@ class ParallaxEngine {
       map: this.createSparkTexture(),
       transparent: true,
       opacity: 0.85,
+      depthTest: false,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       sizeAttenuation: true,
     });
-    return new THREE.Points(geometry, material);
+    const particles = new THREE.Points(geometry, material);
+    material.opacity = 0;
+    particles.renderOrder = 3;
+    return particles;
   }
 
   createSparkTexture() {
@@ -256,7 +292,7 @@ class ParallaxEngine {
       );
     });
     position.needsUpdate = true;
-    this.particles.material.opacity = 0.58 + Math.sin(angle) * 0.22;
+    this.particles.material.opacity = (0.58 + Math.sin(angle) * 0.22) * this.revealProgress;
   }
 
   setPreviewMode(mode) {
@@ -272,12 +308,43 @@ class ParallaxEngine {
     if (this.animationFrame) return;
     const render = (now) => {
       if (!this.isActive) { this.animationFrame = null; return; }
+      const deltaSeconds = Math.min(0.05, Math.max(0, (now - this.lastFrameTime) / 1000));
+      this.lastFrameTime = now;
+      if (this.anchorTransformReady && this.anchorGroup) {
+        const smoothing = THREE.MathUtils.clamp(this.config.anchorSmoothing, 0.04, 0.5);
+        const alpha = 1 - Math.pow(1 - smoothing, deltaSeconds * 60);
+        this.anchorCurrentPosition.lerp(this.anchorTargetPosition, alpha);
+        this.anchorCurrentQuaternion.slerp(this.anchorTargetQuaternion, alpha);
+        this.anchorCurrentScale.lerp(this.anchorTargetScale, alpha);
+        this.anchorGroup.matrix.compose(
+          this.anchorCurrentPosition,
+          this.anchorCurrentQuaternion,
+          this.anchorCurrentScale,
+        );
+        this.anchorGroup.matrixWorldNeedsUpdate = true;
+      }
+      this.revealProgress = THREE.MathUtils.damp(
+        this.revealProgress,
+        this.revealTarget,
+        this.revealTarget > this.revealProgress ? 6.5 : 8.5,
+        deltaSeconds,
+      );
+      if (!this.isTargetVisible && this.revealProgress < 0.015 && this.anchorGroup) {
+        this.anchorGroup.visible = false;
+        this.anchorTransformReady = false;
+        this.revealProgress = 0;
+      }
       const loopPhase = ((now - this.clockStart) % LOOP_DURATION) / LOOP_DURATION;
       const angle = loopPhase * Math.PI * 2;
       if (this.anchorGroup?.visible) {
-        const breathing = 1 + Math.sin(angle) * 0.008;
-        this.storyGroup.scale.setScalar(breathing);
-        if (this.storyMaterial) this.storyMaterial.uniforms.uTime.value = loopPhase;
+        const revealEase = 1 - Math.pow(1 - this.revealProgress, 3);
+        const breathing = 1 + Math.sin(angle) * 0.005;
+        this.storyGroup.scale.setScalar((0.985 + revealEase * 0.015) * breathing);
+        if (this.storyMaterial) {
+          this.storyMaterial.uniforms.uTime.value = loopPhase;
+          this.storyMaterial.uniforms.uReveal.value = revealEase;
+        }
+        if (this.frameMesh) this.frameMesh.material.opacity = 0.4 * revealEase;
         this.updateParticles(loopPhase);
       }
       this.renderer.render(this.scene, this.camera);
