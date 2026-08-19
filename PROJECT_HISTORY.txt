@@ -311,3 +311,6 @@ FIN DEL REGISTRO
 2026-08-19 — Fiduciales de perspectiva y QR simplificado
 - El marco usa una zona blanca perimetral, grosor negro equivalente al 4% del ancho y cuatro esquinas interiores sólidas en L para reforzar la homografía.
 - Las nuevas láminas codifican una ruta /v/ con el UUID compactado de 36 a 22 caracteres y QR Level M; /ver/:uuid se conserva para compatibilidad.
+2026-08-19 — Corrección crítica del input de cámara MindAR
+- Se sincronizan video.width/video.height con video.videoWidth/video.videoHeight antes de crear el Controller, igual que en el wrapper oficial de MindAR 1.2.5. El detector ya recibe frames con las dimensiones reales.
+- Se fija interestedTargetIndex = 0, se valida que el .mind tenga un único target y se registran targetFound, targetLost, actividad del bucle, errores asíncronos y pérdida/restauración de WebGL.

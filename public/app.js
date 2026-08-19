@@ -327,6 +327,12 @@ class InkMotionApp {
   }
 
   bindTrackingEvents() {
+    window.addEventListener('error', (event) => {
+      console.error('[InkMotion/Global] Excepción no controlada', event.error || event.message);
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('[InkMotion/Global] Promise rechazada sin controlar', event.reason);
+    });
     EventBus.on('mindar:engine-state', ({ state, attempt, total }) => {
       if (state === 'ready') this.setBuildState('processing', 'Motor AR conectado · analizando imagen…', 20);
       else if (state === 'retrying') this.setBuildState('processing', `Conectando con el motor AR · alternativa ${attempt} de ${total}…`, 10);
@@ -344,6 +350,8 @@ class InkMotionApp {
       else if (state === 'error') this.setReaderStatus(error?.message || 'No se pudo descargar el marcador AR.', 'error');
     });
     EventBus.on('mindar:scan-timeout', ({ message }) => this.setReaderStatus(message, 'warning'));
+    EventBus.on('mindar:processing-error', (error) => this.setReaderStatus(error?.message || 'El motor AR interrumpió el procesamiento.', 'error'));
+    EventBus.on('parallax:webgl-error', (error) => this.setReaderStatus(error?.message || 'WebGL dejó de responder.', 'error'));
   }
 
   setReaderStatus(message, state) {

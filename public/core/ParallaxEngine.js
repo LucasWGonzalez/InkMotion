@@ -45,6 +45,14 @@ class ParallaxEngine {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.domElement.className = 'three-parallax-canvas';
     this.renderer.domElement.setAttribute('aria-label', 'Contenido AR anclado al cuento');
+    this.renderer.domElement.addEventListener('webglcontextlost', (event) => {
+      event.preventDefault();
+      console.error('[InkMotion/WebGL] Contexto perdido; el renderizado AR se detuvo.', event);
+      EventBus.emit('parallax:webgl-error', new Error('El contexto WebGL se perdió durante la experiencia AR.'));
+    });
+    this.renderer.domElement.addEventListener('webglcontextrestored', () => {
+      console.info('[InkMotion/WebGL] Contexto restaurado.');
+    });
     this.container.replaceChildren(this.renderer.domElement);
 
     this.anchorGroup = new THREE.Group();

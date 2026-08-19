@@ -47,6 +47,17 @@ class MindARManager {
       if (!this.video.videoWidth) {
         await new Promise((resolve) => this.video.addEventListener('loadedmetadata', resolve, { once: true }));
       }
+      // MindAR's InputLoader reads video.width/video.height (DOM attributes),
+      // not the CSS size nor videoWidth/videoHeight. Without this sync the
+      // camera is visible but the detector receives an empty/mis-sized frame.
+      this.video.setAttribute('width', `${this.video.videoWidth}`);
+      this.video.setAttribute('height', `${this.video.videoHeight}`);
+      console.info('[InkMotion/MindAR] Cámara lista para tracking', {
+        videoWidth: this.video.videoWidth,
+        videoHeight: this.video.videoHeight,
+        inputWidth: this.video.width,
+        inputHeight: this.video.height,
+      });
       this.isRunning = true;
       EventBus.emit('mindar:video-ready', {
         videoWidth: this.video.videoWidth,
@@ -101,11 +112,14 @@ class MindARManager {
         missTolerance: this.config.missTolerance,
         filterMinCF: this.config.filterMinCF,
         filterBeta: this.config.filterBeta,
-        onUpdate: (data) => this.handleControllerUpdate(data),
+        onUpdate: (data) => this.handleControllerUpdateSafely(data),
       });
 
       const { dimensions } = this.controller.addImageTargetsFromBuffer(targetBuffer);
+      if (dimensions.length !== 1) throw new Error(`El marcador compilado contiene ${dimensions.length} targets; se esperaba exactamente uno.`);
       this.targetDimensions = dimensions[0];
+      this.controller.interestedTargetIndex = 0;
+      console.info('[InkMotion/MindAR] Target registrado', { targetIndex: 0, dimensions: this.targetDimensions });
       EventBus.emit('mindar:projection-ready', {
         projectionMatrix: this.controller.getProjectionMatrix(),
         videoWidth: this.video.videoWidth,
@@ -214,10 +228,17 @@ class MindARManager {
       missTolerance: this.config.missTolerance,
       filterMinCF: this.config.filterMinCF,
       filterBeta: this.config.filterBeta,
-      onUpdate: (data) => this.handleControllerUpdate(data),
+      onUpdate: (data) => this.handleControllerUpdateSafely(data),
     });
     const { dimensions } = this.controller.addImageTargetsFromBuffer(targetBuffer);
+    if (dimensions.length !== 1) throw new Error(`El archivo .mind contiene ${dimensions.length} targets; se esperaba exactamente uno.`);
     this.targetDimensions = dimensions[0];
+    this.controller.interestedTargetIndex = 0;
+    console.info('[InkMotion/MindAR] Target .mind registrado', {
+      targetIndex: 0,
+      dimensions: this.targetDimensions,
+      sizeBytes: targetBuffer.byteLength,
+    });
     EventBus.emit('mindar:projection-ready', { projectionMatrix: this.controller.getProjectionMatrix(), videoWidth: this.video.videoWidth, videoHeight: this.video.videoHeight });
     await this.controller.dummyRun(this.video);
     this.controller.processVideo(this.video);
@@ -226,11 +247,19 @@ class MindARManager {
   }
 
   handleControllerUpdate(data) {
+    if (data.type === 'processDone') {
+      this.processedFrames = (this.processedFrames || 0) + 1;
+      if (this.processedFrames === 1 || this.processedFrames % 300 === 0) {
+        console.debug('[InkMotion/MindAR] Bucle activo', { processedFrames: this.processedFrames });
+      }
+      return;
+    }
     if (data.type !== 'updateMatrix' || data.targetIndex !== 0) return;
     if (data.worldMatrix) {
       if (!this.isTargetVisible) {
         this.clearScanFeedbackTimer();
         this.setTargetVisible(true);
+        console.info('[InkMotion/MindAR] targetFound', { targetIndex: data.targetIndex });
         EventBus.emit('mindar:target-found', { index: 0 });
       }
       EventBus.emit('mindar:target-update', {
@@ -240,8 +269,17 @@ class MindARManager {
       });
     } else if (this.isTargetVisible) {
       this.setTargetVisible(false);
+      console.info('[InkMotion/MindAR] targetLost', { targetIndex: data.targetIndex });
       EventBus.emit('mindar:target-lost', { index: 0 });
       this.startScanFeedbackTimer();
+    }
+  }
+
+  handleControllerUpdateSafely(data) {
+    try { this.handleControllerUpdate(data); }
+    catch (error) {
+      console.error('[InkMotion/MindAR] Excepción en el bucle de tracking', error);
+      EventBus.emit('mindar:processing-error', error);
     }
   }
 
