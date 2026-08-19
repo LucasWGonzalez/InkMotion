@@ -29,7 +29,7 @@ async function loadLibrary() {
 export async function renderStoryQR(canvas, publicUrl, options = {}) {
   const QRCode = await loadLibrary();
   await QRCode.toCanvas(canvas, publicUrl, {
-    errorCorrectionLevel: 'H',
+    errorCorrectionLevel: options.errorCorrectionLevel || 'H',
     width: options.width || 1024,
     margin: options.margin ?? 4,
     color: { dark: '#08080DFF', light: '#FFFFFFFF' },

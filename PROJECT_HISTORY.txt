@@ -308,3 +308,6 @@ FIN DEL REGISTRO
 2026-08-19 — Lámina Maestra de proporción dinámica
 - El Canvas ahora lee las dimensiones reales de cada ilustración y conserva su proporción en la lámina, el marco AR y el PDF de imprenta.
 - Resolución, márgenes, trazos, tipografía y QR escalan según el lado menor de la obra; el PDF usa un tamaño de página personalizado a 300 DPI.
+2026-08-19 — Fiduciales de perspectiva y QR simplificado
+- El marco usa una zona blanca perimetral, grosor negro equivalente al 4% del ancho y cuatro esquinas interiores sólidas en L para reforzar la homografía.
+- Las nuevas láminas codifican una ruta /v/ con el UUID compactado de 36 a 22 caracteres y QR Level M; /ver/:uuid se conserva para compatibilidad.

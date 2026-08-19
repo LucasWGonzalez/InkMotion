@@ -45,17 +45,15 @@ function canvasToBlob(canvas, type, quality) {
   ));
 }
 
-function drawCorner(context, x, y, horizontal, vertical, unit) {
-  const length = unit * 4.4;
-  context.beginPath();
-  context.moveTo(x + horizontal * length, y);
-  context.lineTo(x, y);
-  context.lineTo(x, y + vertical * length);
-  context.stroke();
-  context.fillStyle = '#7657ed';
-  context.fillRect(x - unit * 0.56, y - unit * 0.56, unit * 1.12, unit * 1.12);
-  context.fillStyle = '#08080d';
-  context.fillRect(x - unit * 0.26, y - unit * 0.26, unit * 0.52, unit * 0.52);
+function drawFiducialCorner(context, x, y, horizontal, vertical, frameWidth) {
+  const arm = frameWidth * 1.65;
+  const thickness = frameWidth * 0.55;
+  const horizontalX = horizontal > 0 ? x : x - arm;
+  const horizontalY = vertical > 0 ? y : y - thickness;
+  const verticalX = horizontal > 0 ? x : x - thickness;
+  const verticalY = vertical > 0 ? y : y - arm;
+  context.fillRect(horizontalX, horizontalY, arm, thickness);
+  context.fillRect(verticalX, verticalY, thickness, arm);
 }
 
 function calculateOutputSize(width, height) {
@@ -73,11 +71,14 @@ export default class MasterSheetGenerator {
     const output = calculateOutputSize(sourceWidth, sourceHeight);
     const shortest = Math.min(output.width, output.height);
     const unit = shortest / 80;
-    const inset = Math.round(shortest * 0.045);
-    const artInset = Math.round(shortest * 0.072);
+    const frameWidth = Math.max(12, Math.round(output.width * 0.04));
+    const quietX = Math.round(output.width * 0.055);
+    const quietY = Math.round(output.height * 0.055);
+    const artInsetX = Math.round(output.width * 0.16);
+    const artInsetY = Math.round(output.height * 0.16);
     const qrSize = Math.round(Math.min(420, Math.max(180, shortest * 0.135)));
     const qrCanvas = document.createElement('canvas');
-    await renderStoryQR(qrCanvas, publicUrl, { width: qrSize, margin: 2 });
+    await renderStoryQR(qrCanvas, publicUrl, { width: qrSize, margin: 3, errorCorrectionLevel: 'M' });
 
     const canvas = document.createElement('canvas');
     canvas.width = output.width;
@@ -88,22 +89,22 @@ export default class MasterSheetGenerator {
     context.fillStyle = '#fff';
     context.fillRect(0, 0, canvas.width, canvas.height);
 
-    const frame = { x: inset, y: inset, width: canvas.width - inset * 2, height: canvas.height - inset * 2 };
+    const frame = { x: quietX, y: quietY, width: canvas.width - quietX * 2, height: canvas.height - quietY * 2 };
     context.strokeStyle = '#08080d';
-    context.lineWidth = Math.max(8, unit * 0.46);
+    context.lineWidth = frameWidth;
     context.strokeRect(frame.x, frame.y, frame.width, frame.height);
-    context.strokeStyle = '#7657ed';
-    context.lineWidth = Math.max(3, unit * 0.17);
-    const innerStroke = unit * 0.92;
-    context.strokeRect(frame.x + innerStroke, frame.y + innerStroke, frame.width - innerStroke * 2, frame.height - innerStroke * 2);
-    context.strokeStyle = '#08080d';
-    context.lineWidth = unit;
-    drawCorner(context, frame.x, frame.y, 1, 1, unit);
-    drawCorner(context, frame.x + frame.width, frame.y, -1, 1, unit);
-    drawCorner(context, frame.x, frame.y + frame.height, 1, -1, unit);
-    drawCorner(context, frame.x + frame.width, frame.y + frame.height, -1, -1, unit);
+    context.fillStyle = '#08080d';
+    const fiducialOffset = frameWidth * 0.45;
+    const left = frame.x + frameWidth / 2 + fiducialOffset;
+    const right = frame.x + frame.width - frameWidth / 2 - fiducialOffset;
+    const top = frame.y + frameWidth / 2 + fiducialOffset;
+    const bottom = frame.y + frame.height - frameWidth / 2 - fiducialOffset;
+    drawFiducialCorner(context, left, top, 1, 1, frameWidth);
+    drawFiducialCorner(context, right, top, -1, 1, frameWidth);
+    drawFiducialCorner(context, left, bottom, 1, -1, frameWidth);
+    drawFiducialCorner(context, right, bottom, -1, -1, frameWidth);
 
-    const area = { x: artInset, y: artInset, width: canvas.width - artInset * 2, height: canvas.height - artInset * 2 };
+    const area = { x: artInsetX, y: artInsetY, width: canvas.width - artInsetX * 2, height: canvas.height - artInsetY * 2 };
     const scale = Math.min(area.width / sourceWidth, area.height / sourceHeight);
     const content = {
       x: Math.round(area.x + (area.width - sourceWidth * scale) / 2),

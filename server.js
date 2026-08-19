@@ -9,7 +9,7 @@ const mime = { '.html':'text/html; charset=utf-8', '.js':'application/javascript
 
 http.createServer((req, res) => {
   const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-  const routeFile = pathname === '/' || pathname === '/crear' || /^\/ver\/[0-9a-f-]+$/i.test(pathname) ? '/index.html' : pathname;
+  const routeFile = pathname === '/' || pathname === '/crear' || /^\/(?:v|ver)\/[A-Za-z0-9_-]+$/.test(pathname) ? '/index.html' : pathname;
   const filePath = path.resolve(root, `.${routeFile}`);
   if (!filePath.startsWith(`${root}${path.sep}`) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     res.writeHead(404, { 'Content-Type':'text/plain; charset=utf-8' }); res.end('404 - Archivo no encontrado'); return;

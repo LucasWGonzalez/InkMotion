@@ -8,6 +8,22 @@ import MasterSheetGenerator from './core/MasterSheetGenerator.js';
 const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
 const OAUTH_DRAFT_DB = 'inkmotion-oauth-draft';
 
+function compactProjectId(uuid) {
+  const bytes = uuid.replaceAll('-', '').match(/.{2}/g).map((pair) => String.fromCharCode(parseInt(pair, 16))).join('');
+  return btoa(bytes).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+}
+
+function expandProjectId(value) {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) return value;
+  if (!/^[A-Za-z0-9_-]{22}$/.test(value)) return null;
+  try {
+    const binary = atob(value.replaceAll('-', '+').replaceAll('_', '/') + '==');
+    const hex = Array.from(binary, (character) => character.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+    const uuid = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid) ? uuid : null;
+  } catch { return null; }
+}
+
 function accessOAuthDraft(action) {
   return new Promise((resolve, reject) => {
     if (!window.indexedDB) { resolve(null); return; }
@@ -44,8 +60,11 @@ class InkMotionApp {
     const path = window.location.pathname.replace(/\/+$/, '') || '/';
     if (path === '/') { window.location.replace('/crear'); return; }
     if (path === '/crear') return this.startAuthor();
-    const match = path.match(/^\/ver\/([0-9a-f-]+)$/i);
-    if (match) return this.startReader(match[1]);
+    const match = path.match(/^\/(?:v|ver)\/([A-Za-z0-9_-]+)$/);
+    if (match) {
+      const id = expandProjectId(match[1]);
+      if (id) return this.startReader(id);
+    }
     this.showFatal('La página solicitada no existe.', '/crear', 'Ir al panel de autor');
   }
 
@@ -154,7 +173,7 @@ class InkMotionApp {
     try {
       const projectId = this.pendingProject.id || crypto.randomUUID();
       this.pendingProject.id = projectId;
-      const url = `${window.location.origin}/ver/${projectId}`;
+      const url = `${window.location.origin}/v/${compactProjectId(projectId)}`;
       this.setBuildState('publishing', 'Componiendo lámina maestra a 300 DPI…', 20);
       const sheet = await this.sheetGenerator.compose({ illustrationUrl: this.pendingProject.imageUrl, publicUrl: url, title });
       this.setBuildState('publishing', 'Compilando la lámina completa como marcador AR…', 45);
