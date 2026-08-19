@@ -1,6 +1,8 @@
 import { renderStoryQR } from '../utils/QRGenerator.js';
 
-const SHEET = Object.freeze({ width: 2480, height: 3508, dpi: 300 });
+const PRINT_DPI = 300;
+const MIN_PRINT_SIDE = 2400;
+const MAX_PRINT_SIDE = 5000;
 const PDF_SOURCES = [
   'https://esm.sh/jspdf@2.5.2',
   'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/+esm',
@@ -43,51 +45,65 @@ function canvasToBlob(canvas, type, quality) {
   ));
 }
 
-function drawCorner(context, x, y, horizontal, vertical) {
-  const length = 132;
+function drawCorner(context, x, y, horizontal, vertical, unit) {
+  const length = unit * 4.4;
   context.beginPath();
   context.moveTo(x + horizontal * length, y);
   context.lineTo(x, y);
   context.lineTo(x, y + vertical * length);
   context.stroke();
   context.fillStyle = '#7657ed';
-  context.fillRect(x - 17, y - 17, 34, 34);
+  context.fillRect(x - unit * 0.56, y - unit * 0.56, unit * 1.12, unit * 1.12);
   context.fillStyle = '#08080d';
-  context.fillRect(x - 8, y - 8, 16, 16);
+  context.fillRect(x - unit * 0.26, y - unit * 0.26, unit * 0.52, unit * 0.52);
+}
+
+function calculateOutputSize(width, height) {
+  const shortest = Math.min(width, height);
+  const longest = Math.max(width, height);
+  const scale = Math.min(MAX_PRINT_SIDE / longest, Math.max(1, MIN_PRINT_SIDE / shortest));
+  return { width: Math.round(width * scale), height: Math.round(height * scale) };
 }
 
 export default class MasterSheetGenerator {
   async compose({ illustrationUrl, publicUrl, title = 'InkMotion' }) {
     const [illustration] = await Promise.all([loadImage(illustrationUrl)]);
+    const sourceWidth = illustration.naturalWidth || illustration.width;
+    const sourceHeight = illustration.naturalHeight || illustration.height;
+    const output = calculateOutputSize(sourceWidth, sourceHeight);
+    const shortest = Math.min(output.width, output.height);
+    const unit = shortest / 80;
+    const inset = Math.round(shortest * 0.045);
+    const artInset = Math.round(shortest * 0.072);
+    const qrSize = Math.round(Math.min(420, Math.max(180, shortest * 0.135)));
     const qrCanvas = document.createElement('canvas');
-    await renderStoryQR(qrCanvas, publicUrl, { width: 300, margin: 2 });
+    await renderStoryQR(qrCanvas, publicUrl, { width: qrSize, margin: 2 });
 
     const canvas = document.createElement('canvas');
-    canvas.width = SHEET.width;
-    canvas.height = SHEET.height;
+    canvas.width = output.width;
+    canvas.height = output.height;
     const context = canvas.getContext('2d', { alpha: false });
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = 'high';
     context.fillStyle = '#fff';
     context.fillRect(0, 0, canvas.width, canvas.height);
 
-    const frame = { x: 126, y: 126, width: 2228, height: 3256 };
+    const frame = { x: inset, y: inset, width: canvas.width - inset * 2, height: canvas.height - inset * 2 };
     context.strokeStyle = '#08080d';
-    context.lineWidth = 14;
+    context.lineWidth = Math.max(8, unit * 0.46);
     context.strokeRect(frame.x, frame.y, frame.width, frame.height);
     context.strokeStyle = '#7657ed';
-    context.lineWidth = 5;
-    context.strokeRect(frame.x + 28, frame.y + 28, frame.width - 56, frame.height - 56);
+    context.lineWidth = Math.max(3, unit * 0.17);
+    const innerStroke = unit * 0.92;
+    context.strokeRect(frame.x + innerStroke, frame.y + innerStroke, frame.width - innerStroke * 2, frame.height - innerStroke * 2);
     context.strokeStyle = '#08080d';
-    context.lineWidth = 30;
-    drawCorner(context, frame.x, frame.y, 1, 1);
-    drawCorner(context, frame.x + frame.width, frame.y, -1, 1);
-    drawCorner(context, frame.x, frame.y + frame.height, 1, -1);
-    drawCorner(context, frame.x + frame.width, frame.y + frame.height, -1, -1);
+    context.lineWidth = unit;
+    drawCorner(context, frame.x, frame.y, 1, 1, unit);
+    drawCorner(context, frame.x + frame.width, frame.y, -1, 1, unit);
+    drawCorner(context, frame.x, frame.y + frame.height, 1, -1, unit);
+    drawCorner(context, frame.x + frame.width, frame.y + frame.height, -1, -1, unit);
 
-    const area = { x: 236, y: 260, width: 2008, height: 2722 };
-    const sourceWidth = illustration.naturalWidth || illustration.width;
-    const sourceHeight = illustration.naturalHeight || illustration.height;
+    const area = { x: artInset, y: artInset, width: canvas.width - artInset * 2, height: canvas.height - artInset * 2 };
     const scale = Math.min(area.width / sourceWidth, area.height / sourceHeight);
     const content = {
       x: Math.round(area.x + (area.width - sourceWidth * scale) / 2),
@@ -96,24 +112,37 @@ export default class MasterSheetGenerator {
       height: Math.round(sourceHeight * scale),
     };
     context.fillStyle = '#f5f4f8';
-    context.fillRect(area.x - 12, area.y - 12, area.width + 24, area.height + 24);
+    context.fillRect(area.x - unit * 0.4, area.y - unit * 0.4, area.width + unit * 0.8, area.height + unit * 0.8);
     context.drawImage(illustration, content.x, content.y, content.width, content.height);
 
-    const footerY = 3032;
+    const panelPadding = unit * 0.62;
+    const brandFont = Math.max(26, Math.round(unit * 1.35));
+    const detailFont = Math.max(15, Math.round(unit * 0.72));
+    const titleFont = Math.max(17, Math.round(unit * 0.82));
+    const brandPanelWidth = Math.min(content.width * 0.58, unit * 42);
+    const brandPanelHeight = unit * 5.8;
+    const brandX = content.x + unit * 0.7;
+    const brandY = content.y + content.height - brandPanelHeight - unit * 0.7;
+    context.fillStyle = 'rgba(255,255,255,.94)';
+    context.fillRect(brandX, brandY, brandPanelWidth, brandPanelHeight);
     context.fillStyle = '#08080d';
-    context.font = '800 42px Arial, sans-serif';
-    context.fillText('INKMOTION', 236, footerY + 56);
+    context.font = `800 ${brandFont}px Arial, sans-serif`;
+    context.fillText('INKMOTION', brandX + panelPadding, brandY + unit * 1.9);
     context.fillStyle = '#7657ed';
-    context.font = '700 22px Arial, sans-serif';
-    context.fillText('LÁMINA MAESTRA · EXPERIENCIA AR', 236, footerY + 94);
+    context.font = `700 ${detailFont}px Arial, sans-serif`;
+    context.fillText('LÁMINA MAESTRA · EXPERIENCIA AR', brandX + panelPadding, brandY + unit * 3.15, brandPanelWidth - panelPadding * 2);
     context.fillStyle = '#34343d';
-    context.font = '500 25px Arial, sans-serif';
+    context.font = `500 ${titleFont}px Arial, sans-serif`;
     const safeTitle = `${title}`.slice(0, 72);
-    context.fillText(safeTitle, 236, footerY + 142, 1380);
+    context.fillText(safeTitle, brandX + panelPadding, brandY + unit * 4.65, brandPanelWidth - panelPadding * 2);
 
-    const qr = { x: 1950, y: 3026, size: 300 };
+    const qr = {
+      x: content.x + content.width - qrSize - unit * 0.7,
+      y: content.y + content.height - qrSize - unit * 0.7,
+      size: qrSize,
+    };
     context.fillStyle = '#fff';
-    context.fillRect(qr.x - 18, qr.y - 18, qr.size + 36, qr.size + 36);
+    context.fillRect(qr.x - unit * 0.55, qr.y - unit * 0.55, qr.size + unit * 1.1, qr.size + unit * 1.1);
     context.drawImage(qrCanvas, qr.x, qr.y, qr.size, qr.size);
 
     const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.96);
@@ -123,21 +152,26 @@ export default class MasterSheetGenerator {
       imageBlob,
       imageUrl: URL.createObjectURL(imageBlob),
       jpegDataUrl,
-      dpi: SHEET.dpi,
+      dpi: PRINT_DPI,
+      pageSizeMm: {
+        width: canvas.width / PRINT_DPI * 25.4,
+        height: canvas.height / PRINT_DPI * 25.4,
+      },
       contentRect: {
-        x: content.x / SHEET.width,
-        y: content.y / SHEET.height,
-        width: content.width / SHEET.width,
-        height: content.height / SHEET.height,
-        targetAspect: SHEET.height / SHEET.width,
+        x: content.x / canvas.width,
+        y: content.y / canvas.height,
+        width: content.width / canvas.width,
+        height: content.height / canvas.height,
+        targetAspect: canvas.height / canvas.width,
       },
     };
   }
 
-  async createPdf(jpegDataUrl) {
+  async createPdf(jpegDataUrl, pageSizeMm) {
     const jsPDF = await loadPdfLibrary();
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
-    pdf.addImage(jpegDataUrl, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+    const orientation = pageSizeMm.width > pageSizeMm.height ? 'landscape' : 'portrait';
+    const pdf = new jsPDF({ orientation, unit: 'mm', format: [pageSizeMm.width, pageSizeMm.height], compress: true });
+    pdf.addImage(jpegDataUrl, 'JPEG', 0, 0, pageSizeMm.width, pageSizeMm.height, undefined, 'FAST');
     return pdf.output('blob');
   }
 }

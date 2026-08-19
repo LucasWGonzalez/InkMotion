@@ -305,3 +305,6 @@ FIN DEL REGISTRO
 - El autor recibe un único archivo InkMotion_Lamina_Final.pdf y una vista previa de la lámina publicada.
 2026-08-19 — Firma del creador
 - Se añadió un footer global y adaptable con la firma “Creado por Lic. Lucas Walter González” y enlace seguro a su perfil de LinkedIn.
+2026-08-19 — Lámina Maestra de proporción dinámica
+- El Canvas ahora lee las dimensiones reales de cada ilustración y conserva su proporción en la lámina, el marco AR y el PDF de imprenta.
+- Resolución, márgenes, trazos, tipografía y QR escalan según el lado menor de la obra; el PDF usa un tamaño de página personalizado a 300 DPI.

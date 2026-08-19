@@ -160,7 +160,7 @@ class InkMotionApp {
       this.setBuildState('publishing', 'Compilando la lámina completa como marcador AR…', 45);
       const compiled = await new MindARManager().compileTarget(sheet.imageUrl);
       this.setBuildState('publishing', 'Preparando PDF de impresión…', 75);
-      const pdfBlob = await this.sheetGenerator.createPdf(sheet.jpegDataUrl);
+      const pdfBlob = await this.sheetGenerator.createPdf(sheet.jpegDataUrl, sheet.pageSizeMm);
       const config = { depthStrength: 0.08, animation: 'magic-breathe', loopSeconds: 5, anchor: 'mindar', contentRect: sheet.contentRect, sheetDpi: sheet.dpi };
       const project = await this.store.saveProject({ id: projectId, title, imageBlob: this.pendingProject.imageBlob, targetBlob: compiled.blob, config });
       this.masterSheetPdfUrl = URL.createObjectURL(pdfBlob);
