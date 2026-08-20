@@ -196,6 +196,22 @@ class ProjectStore {
     }
   }
 
+  async generateDepth(id) {
+    const session = await this.requireActiveSession();
+    try {
+      const { data, error } = await this.client.functions.invoke('generate-depth', {
+        body: { storyId: id },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+      if (!data?.depthPath) throw new Error('Replicate no devolvió un mapa de profundidad válido.');
+      return data;
+    } catch (error) {
+      logSupabaseError('la generación del mapa de profundidad', error, { storyId: id });
+      throw normalizeNetworkError(error);
+    }
+  }
+
   async getProject(id) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return null;
     try {
@@ -203,7 +219,12 @@ class ProjectStore {
       if (error) throw error;
       if (!data) return null;
       const publicUrl = (path) => this.client.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-      return { ...data, imageUrl: publicUrl(data.image_path), targetUrl: publicUrl(data.target_path) };
+      return {
+        ...data,
+        imageUrl: publicUrl(data.image_path),
+        targetUrl: publicUrl(data.target_path),
+        depthUrl: data.config?.depthPath ? publicUrl(data.config.depthPath) : null,
+      };
     } catch (error) { throw normalizeNetworkError(error); }
   }
 }

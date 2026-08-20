@@ -17,6 +17,7 @@ class ParallaxEngine {
     this.particles = null;
     this.particleBase = null;
     this.texture = null;
+    this.depthTexture = null;
     this.storyMaterial = null;
     this.animationFrame = null;
     this.isActive = false;
@@ -79,10 +80,14 @@ class ParallaxEngine {
     EventBus.emit('parallax:initialized', { anchorMode: 'mindar-world-lock' });
   }
 
-  async setTargetImage(url) {
-    const texture = await new Promise((resolve, reject) => {
-      new THREE.TextureLoader().load(url, resolve, undefined, () => reject(new Error('No se pudo cargar la textura 3D.')));
+  async loadTexture(url, errorMessage) {
+    return new Promise((resolve, reject) => {
+      new THREE.TextureLoader().load(url, resolve, undefined, () => reject(new Error(errorMessage)));
     });
+  }
+
+  async setTargetImage(url, depthUrl = null) {
+    const texture = await this.loadTexture(url, 'No se pudo cargar la textura 3D.');
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
@@ -90,6 +95,18 @@ class ParallaxEngine {
 
     this.disposeTarget();
     this.texture = texture;
+    if (depthUrl) {
+      try {
+        this.depthTexture = await this.loadTexture(depthUrl, 'No se pudo cargar el mapa de profundidad IA.');
+        this.depthTexture.colorSpace = THREE.NoColorSpace;
+        this.depthTexture.minFilter = THREE.LinearFilter;
+        this.depthTexture.magFilter = THREE.LinearFilter;
+        this.depthTexture.wrapS = this.depthTexture.wrapT = THREE.ClampToEdgeWrapping;
+      } catch (error) {
+        console.warn('[InkMotion/Depth] Mapa IA no disponible; usando luminancia local.', error);
+        this.depthTexture = null;
+      }
+    }
     const image = texture.image;
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
@@ -101,7 +118,7 @@ class ParallaxEngine {
       : 1 / aspect;
 
     const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight, 80, 60);
-    this.storyMaterial = this.createDepthMaterial(texture);
+    this.storyMaterial = this.createDepthMaterial(texture, this.depthTexture || texture, Boolean(this.depthTexture));
     this.imageMesh = new THREE.Mesh(geometry, this.storyMaterial);
     this.imageMesh.position.z = 0.018;
 
@@ -123,19 +140,23 @@ class ParallaxEngine {
     EventBus.emit('parallax:texture-ready', { width, height, anchorMode: 'mindar' });
   }
 
-  createDepthMaterial(texture) {
+  createDepthMaterial(texture, depthTexture, hasAiDepth) {
     const textureWidth = texture.image.naturalWidth || texture.image.width || 1;
     const textureHeight = texture.image.naturalHeight || texture.image.height || 1;
     return new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       uniforms: {
         uTexture: { value: texture },
+        uDepthMap: { value: depthTexture },
+        uHasAiDepth: { value: hasAiDepth ? 1 : 0 },
         uDepthStrength: { value: this.config.depthStrength },
         uReveal: { value: 0 },
         uTexelSize: { value: new THREE.Vector2(1 / textureWidth, 1 / textureHeight) },
       },
       vertexShader: `
         uniform sampler2D uTexture;
+        uniform sampler2D uDepthMap;
+        uniform float uHasAiDepth;
         uniform float uDepthStrength;
         uniform float uReveal;
         uniform vec2 uTexelSize;
@@ -159,7 +180,10 @@ class ParallaxEngine {
           // Zero is the paper plane: dark ink remains attached to it. Midtones,
           // highlights and luminance edges rise without any negative displacement.
           float luminanceHeight = pow(smoothstep(0.16, 0.88, center), 1.35);
-          vHeight = clamp(max(luminanceHeight, edge * 0.42), 0.0, 1.0);
+          float aiHeight = texture2D(uDepthMap, uv).r;
+          aiHeight = pow(smoothstep(0.06, 0.94, aiHeight), 1.12);
+          float fallbackHeight = max(luminanceHeight, edge * 0.42);
+          vHeight = clamp(mix(fallbackHeight, aiHeight, uHasAiDepth), 0.0, 1.0);
           vec3 displaced = position;
           displaced.z += vHeight * uDepthStrength * uReveal;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
@@ -404,9 +428,11 @@ class ParallaxEngine {
       object.material?.dispose();
     }
     this.texture?.dispose();
+    this.depthTexture?.dispose();
     this.imageMesh = this.frameMesh = this.particles = null;
     this.particleBase = null;
     this.texture = null;
+    this.depthTexture = null;
     this.storyMaterial = null;
   }
 

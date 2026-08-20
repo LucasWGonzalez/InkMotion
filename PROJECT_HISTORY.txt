@@ -304,6 +304,7 @@ FIN DEL REGISTRO
 - La exportación final ahora compone una hoja A4 de 2480 × 3508 px a 300 DPI con ilustración central, marco geométrico de alto contraste y QR de acceso.
 - El UUID y la URL pública se reservan antes de publicar para integrar el QR real en la lámina.
 - MindAR compila la lámina completa como target; la configuración conserva el rectángulo de la ilustración para alinear el efecto 2.5D dentro del marco.
+- Se integró generación de profundidad con IA mediante Replicate Depth Anything V2 y una Supabase Edge Function autenticada. El mapa generado se guarda junto a la obra y Three.js lo utiliza sin alterar los colores originales; se mantiene el relieve local como fallback para la demo.
 - El autor recibe un único archivo InkMotion_Lamina_Final.pdf y una vista previa de la lámina publicada.
 2026-08-19 — Firma del creador
 - Se añadió un footer global y adaptable con la firma “Creado por Lic. Lucas Walter González” y enlace seguro a su perfil de LinkedIn.

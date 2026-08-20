@@ -135,7 +135,7 @@ Abrir `http://localhost:8080/crear`. La cámara solo funciona en `localhost` o m
 ## Limitaciones del MVP
 
 - Un solo target por experiencia.
-- La profundidad se estima a partir de la imagen; no utiliza un depth map semántico.
+- Las obras nuevas solicitan un mapa de profundidad semántico a Depth Anything V2 mediante una Supabase Edge Function. El resultado queda cacheado en Storage y el visor conserva el cálculo local por luminancia como contingencia si Replicate no está disponible.
 - Composición, compilación MindAR y PDF se ejecutan en el navegador del autor.
 - El resultado depende de la iluminación, la impresión, el enfoque y la capacidad del dispositivo.
 - No existe todavía un panel de listado, edición o analítica de obras.
