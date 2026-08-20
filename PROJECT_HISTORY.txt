@@ -1,7 +1,7 @@
 INKMOTION - REGISTRO GENERAL DEL PROYECTO
 =========================================
 
-Ultima actualizacion: 18 de agosto de 2026
+Ultima actualizacion: 19 de agosto de 2026
 Repositorio: https://github.com/LucasWGonzalez/InkMotion
 Rama de produccion: master
 Produccion: https://ink-motion-pied.vercel.app
@@ -12,18 +12,18 @@ Panel de autor: https://ink-motion-pied.vercel.app/crear
 ----------------------
 
 InkMotion comenzo como un visor WebAR experimental con efecto parallax 2.5D y
-evoluciono hacia "Libros Vivos": una plataforma para que un autor convierta la
-ilustracion de un cuento en una experiencia de realidad aumentada accesible desde
-el navegador del celular.
+evoluciono hacia una plataforma de "Obras Vivas": permite convertir ilustraciones,
+historietas, portadas y posters en experiencias de realidad aumentada accesibles
+desde el navegador del celular.
 
 El flujo buscado es:
 
 1) El autor inicia sesion y sube una ilustracion.
-2) La aplicacion prepara la imagen, genera el target de seguimiento y guarda el
-   cuento con un identificador unico.
-3) InkMotion publica un enlace /ver/:id y un codigo QR descargable.
-4) El lector escanea el QR, habilita la camara y apunta a la pagina fisica.
-5) MindAR reconoce la pagina y fija sobre ella la escena Three.js con profundidad,
+2) La aplicacion prepara la imagen, compone la Lamina Maestra y genera el target
+   de seguimiento con un identificador unico.
+3) InkMotion publica un enlace corto /v/:id integrado en el QR y entrega un PDF.
+4) El lector escanea el QR, habilita la camara y apunta a la lamina completa.
+5) MindAR reconoce la lamina y fija sobre ella la escena Three.js con profundidad,
    respiracion y particulas, sin depender de la inclinacion del telefono.
 
 
@@ -146,7 +146,7 @@ Commit de referencia:
 ETAPA 8 - SUPABASE
 
 - Se creo el proyecto Supabase de InkMotion en la region sa-east-1.
-- Se configuro autenticacion por enlace magico.
+- Se configuro autenticacion por Google OAuth con flujo PKCE.
 - Site URL: https://ink-motion-pied.vercel.app
 - Redirect URL: https://ink-motion-pied.vercel.app/crear
 - Se creo la tabla stories con UUID, autor, titulo, rutas de imagen/target,
@@ -177,15 +177,15 @@ Solucion aplicada:
 Commit de referencia:
 - 1a33234 - fix resilient MindAR compiler loading
 
-ETAPA 10 - CODIGO QR PARA PUBLICACION IMPRESA
+ETAPA 10 - LAMINA MAESTRA PARA PUBLICACION IMPRESA
 
-- El panel /crear genera automaticamente un QR despues de publicar un cuento.
-- El QR apunta a https://ink-motion-pied.vercel.app/ver/{storyId}.
+- El panel /crear integra automaticamente el QR dentro de la Lamina Maestra.
+- El QR apunta a la ruta corta https://ink-motion-pied.vercel.app/v/{id-compacto}.
 - Se usa qrcode 1.5.4 cargado en el cliente con fallback de CDN.
-- El codigo utiliza correccion de errores alta (nivel H), margen apto para impresion
-  y salida PNG de 1024 x 1024 pixeles.
-- El boton "Descargar QR - PNG" guarda el archivo con un nombre derivado del cuento.
-- Una falla puntual del generador QR no invalida ni bloquea la publicacion.
+- El codigo utiliza correccion Level M y bloques mas grandes para lectura impresa.
+- Titulo, QR y elementos tecnicos quedan fuera de la ilustracion, sobre paspartu.
+- La descarga entrega un unico archivo InkMotion_Lamina_Final.pdf a 300 DPI.
+- Si la composicion, el QR o el target fallan, la publicacion se detiene y ofrece reintento.
 
 Esta funcionalidad se incorpora en la version publicada junto con este registro.
 
@@ -194,40 +194,41 @@ Esta funcionalidad se incorpora en la version publicada junto con este registro.
 -------------------------
 
 1) Abre /crear.
-2) Solicita el enlace magico e inicia sesion con Supabase Auth.
+2) Inicia sesion con Google mediante Supabase Auth.
 3) Selecciona una imagen de hasta 25 MB.
-4) InkMotion analiza calidad de tracking y optimiza la imagen.
-5) El compilador MindAR crea el archivo .mind en el navegador.
+4) InkMotion optimiza la imagen y compone la Lamina Maestra adaptativa.
+5) El compilador MindAR crea el archivo .mind desde la lamina completa.
 6) Se suben la imagen y el target al bucket stories.
-7) Se inserta el registro del cuento en la tabla stories.
-8) La interfaz devuelve el enlace publico /ver/:id.
-9) Se renderiza el QR y el autor puede descargarlo como PNG para imprenta.
+7) Se inserta el registro de la obra en la tabla stories.
+8) La interfaz devuelve el enlace publico corto /v/:id.
+9) El autor descarga la Lamina Maestra completa como PDF para imprenta.
 
 
 5. FLUJO ACTUAL DEL LECTOR
 --------------------------
 
-1) Escanea el QR o abre /ver/:id.
-2) InkMotion consulta el cuento por ID.
+1) Escanea el QR o abre /v/:id; /ver/:uuid se conserva por compatibilidad.
+2) InkMotion consulta la obra por ID.
 3) Descarga la ilustracion y el target .mind ya compilado.
 4) Solicita permiso de camara.
-5) Muestra un indicador mientras busca la pagina.
+5) Muestra una guia animada mientras busca la lamina completa.
 6) Cuando MindAR detecta el target, la escena queda anclada al papel.
-7) Three.js renderiza profundidad, respiracion y particulas.
-8) Si se pierde el target, el indicador lo informa y la app vuelve a escanear.
+7) Three.js activa "La obra cobro vida": relieve, barrido y particulas.
+8) Una tolerancia de 400 ms absorbe perdidas minimas antes de desvanecer.
 
 
 6. ARCHIVOS PRINCIPALES
 -----------------------
 
-- public/index.html: estructura de /crear y /ver/:id.
+- public/index.html: estructura de /crear, /v/:id y /ver/:id.
 - public/app.js: routing, estados de UI y coordinacion del flujo completo.
 - public/core/ImageProcessor.js: validacion, analisis y compresion de imagenes.
+- public/core/MasterSheetGenerator.js: composicion adaptativa y PDF de imprenta.
 - public/core/MindARLoader.js: carga robusta del runtime/compilador MindAR.
 - public/core/MindARManager.js: ciclo de camara, anchors y eventos de tracking.
 - public/core/ParallaxEngine.js: escena Three.js, shader, profundidad y animacion.
 - public/services/ProjectStore.js: autenticacion y persistencia con Supabase.
-- public/utils/QRGenerator.js: generacion y render del QR descargable.
+- public/utils/QRGenerator.js: generacion del QR Level M integrado en la lamina.
 - public/css/routes.css: estilos responsivos de autor, lector, publicacion y QR.
 - server.js y vercel.json: entrega de estaticos y rewrites de rutas.
 - supabase/migrations/: esquema, bucket y politicas de seguridad.
@@ -242,7 +243,7 @@ Esta funcionalidad se incorpora en la version publicada junto con este registro.
 - Verificacion del flujo de error para no dejar la pantalla negra.
 - Verificacion de rutas /crear y /ver/:id en Vercel.
 - Revision de politicas RLS y avisos de seguridad de Supabase.
-- Verificacion de que el QR se genera desde la URL publica real y exporta PNG.
+- Verificacion de que el QR usa la URL publica corta y queda integrado en el PDF.
 
 Cada despliegue debe cerrarse con una prueba real en celular porque permisos de
 camara, calidad optica, iluminacion y navegador no se reproducen completamente en
@@ -252,11 +253,11 @@ una prueba de escritorio.
 8. PRUEBAS RECOMENDADAS DESPUES DE ESTE DESPLIEGUE
 --------------------------------------------------
 
-1) Abrir /crear en el celular y completar el inicio por enlace magico.
+1) Abrir /crear y completar el inicio con Google.
 2) Publicar una imagen con buen contraste y detalles no repetitivos.
-3) Confirmar que aparece el enlace publico y el QR.
-4) Descargar el PNG y escanearlo desde otro telefono.
-5) Abrir /ver/:id, habilitar camara y apuntar a la pagina impresa o a una pantalla.
+3) Confirmar que aparece el enlace publico y la vista de la Lamina Maestra.
+4) Descargar el PDF y escanearlo desde otro telefono.
+5) Abrir /v/:id, habilitar camara y apuntar a la lamina completa.
 6) Comprobar los estados "escaneando", "detectado" y "target perdido".
 7) Mover el telefono alrededor de la pagina: el contenido debe permanecer anclado.
 8) Repetir con poca luz y a varias distancias.
@@ -265,12 +266,12 @@ una prueba de escritorio.
 9. PROXIMOS PASOS POSIBLES
 --------------------------
 
-- Panel con listado, edicion, despublicacion y borrado de cuentos del autor.
+- Panel con listado, edicion, despublicacion y borrado de obras del autor.
 - Metricas anonimas de aperturas, detecciones y tiempo de experiencia.
 - Mapas de profundidad de mayor calidad generados por un servicio dedicado.
-- Plantillas de animacion seleccionables por tipo de cuento.
+- Plantillas de animacion seleccionables por tipo de obra.
 - Guia de impresion con tamano minimo, zona silenciosa y prueba del QR.
-- Branding por editorial y ficha informativa del cuento.
+- Branding por editorial, organizaciones, equipos y ficha informativa de la obra.
 - Pruebas automatizadas end-to-end y matriz de navegadores moviles.
 - Estrategia de cache/PWA para mejorar aperturas con conectividad limitada.
 
@@ -286,7 +287,8 @@ una prueba de escritorio.
 - 1de854c  add MindAR tracking diagnostics and tolerance
 - 69293fe  separate author and reader routes with persistent AR stories
 - 1a33234  fix resilient MindAR compiler loading
-- Version actual: QR descargable y este registro integral del proyecto.
+- e2c2d8b  polish master sheet and AR reveal experience
+- Version actual: Lamina Maestra adaptativa y activacion visual de Obra Viva.
 
 
 NOTAS DE MANTENIMIENTO

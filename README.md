@@ -1,185 +1,164 @@
-# WebAR Storyteller
+# InkMotion
 
-**WebAR Storyteller** es una plataforma de realidad aumentada web que combina:
-- 🎯 **Image Target Tracking** con MindAR
-- 🎭 **Motor Parallax 2.5D** basado en CSS transforms y DeviceMotion
-- 🖼️ **Procesamiento de imágenes** en cliente con Canvas 2D nativo
+InkMotion convierte ilustraciones, historietas, portadas y pósters en experiencias WebAR accesibles desde el navegador, sin instalar una aplicación.
 
-## 📁 Estructura del Proyecto
+El autor publica una obra y recibe una **Lámina Maestra lista para imprimir**. La lámina integra la ilustración, un paspartú técnico, un marco de anclaje, fiduciales en las esquinas y un QR de acceso. MindAR reconoce la lámina completa y Three.js proyecta sobre ella el efecto de profundidad 2.5D.
 
-```
-webr-storyteller/
+## Producción
+
+- Aplicación: https://ink-motion-pied.vercel.app
+- Panel de autor: https://ink-motion-pied.vercel.app/crear
+- Repositorio: https://github.com/LucasWGonzalez/InkMotion
+- Rama productiva: `master`
+
+## Flujo del producto
+
+### Autor
+
+1. Inicia sesión con Google OAuth.
+2. Sube una ilustración y escribe el título de la obra.
+3. InkMotion optimiza la textura y compone la Lámina Maestra conservando la proporción original.
+4. El compilador oficial de MindAR procesa la lámina completa y genera un target `.mind`.
+5. Se guardan la ilustración, el target y la configuración en Supabase.
+6. El autor descarga un único archivo `InkMotion_Lamina_Final.pdf` a 300 DPI.
+
+### Lector
+
+1. Escanea el QR corto `/v/:id` de la lámina.
+2. InkMotion descarga la obra y el target `.mind` ya compilado.
+3. El lector habilita la cámara y encuadra la lámina completa.
+4. MindAR detecta el target con `targetIndex: 0`.
+5. Three.js ancla la ilustración y activa la transición **“La obra cobró vida”**.
+
+## Características actuales
+
+- Lámina dinámica: cuadrada, vertical u horizontal según la obra.
+- Paspartú neutro con título y QR fuera de la ilustración.
+- QR corto con corrección de errores Level M.
+- PDF de página personalizada calculado a 300 DPI.
+- Compilación `.mind` en el navegador del autor.
+- Tracking físico con MindAR Image Tracking 1.2.5.
+- Render WebGL con Three.js 0.168.0.
+- Shader de profundidad estimada por luminancia.
+- Interpolación de posición, rotación y escala para reducir jitter.
+- Partículas con `AdditiveBlending`, respiración sutil y barrido de luz.
+- Tolerancia de 400 ms ante microcortes de tracking.
+- Guía animada de encuadre y respuesta háptica compatible.
+- Autenticación Google OAuth, base de datos y Storage mediante Supabase.
+- Diagnóstico visible de cámara, descarga, compilación y tracking.
+
+## Arquitectura
+
+InkMotion es una aplicación web modular en JavaScript, HTML y CSS, sin React ni framework de interfaz.
+
+```text
+inkmotion/
 ├── public/
-│   └── index.html              # HTML raíz con CDN MindAR
-├── src/
+│   ├── index.html
+│   ├── app.js
 │   ├── core/
-│   │   ├── MindARManager.js     # Gestión de tracking AR
-│   │   ├── ParallaxEngine.js    # Motor 2.5D CSS
-│   │   └── ImageProcessor.js    # Optimización de imágenes
-│   ├── ui/
-│   │   └── UIController.js      # Componentes de interfaz
+│   │   ├── ImageProcessor.js
+│   │   ├── MasterSheetGenerator.js
+│   │   ├── MindARLoader.js
+│   │   ├── MindARManager.js
+│   │   └── ParallaxEngine.js
+│   ├── services/
+│   │   └── ProjectStore.js
 │   ├── utils/
-│   │   ├── EventBus.js          # Event emitter
-│   │   └── DeviceMotionListener.js # Acelerómetro/giroscopio
-│   ├── css/
-│   │   ├── global.css           # Estilos base
-│   │   ├── parallax.css         # Estilos parallax
-│   │   └── ui.css               # Estilos de componentes
-│   └── app.js                   # Orquestador principal
-├── package.json                 # Dependencias
-├── server.js                    # Servidor Node.js de desarrollo
-└── README.md                    # Este archivo
+│   │   ├── EventBus.js
+│   │   └── QRGenerator.js
+│   └── css/
+│       ├── global.css
+│       ├── parallax.css
+│       ├── routes.css
+│       └── ui.css
+├── supabase/
+│   └── migrations/
+├── server.js
+├── vercel.json
+├── PROJECT_HISTORY.txt
+└── README.md
 ```
 
-## 🚀 Guía Rápida
+## Componentes principales
 
-### 1. Instalar y Correr
+### `MasterSheetGenerator`
+
+- Lee las dimensiones reales de la ilustración.
+- Calcula el lienzo de impresión sin forzar A4 ni deformar la obra.
+- Dibuja paspartú, marco sutil y cuatro fiduciales en “L”.
+- Ubica título y QR en la banda inferior externa.
+- Genera JPEG de alta resolución y PDF personalizado.
+
+### `MindARManager`
+
+- Carga el compilador/runtime de MindAR con CDNs alternativos.
+- Compila la Lámina Maestra como target único.
+- Descarga y valida el `.mind` publicado.
+- Sincroniza las dimensiones reales del video con el `Controller`.
+- Emite eventos de detección, pérdida, progreso y errores.
+
+### `ParallaxEngine`
+
+- Renderiza la obra en un plano subdividido de Three.js.
+- Aplica relieve 2.5D mediante shader.
+- Suaviza la matriz de tracking con `lerp` y `slerp`.
+- Controla barrido de luz, entrada de profundidad y partículas.
+- Mantiene el efecto durante pérdidas mínimas para evitar parpadeos.
+
+### `ProjectStore`
+
+- Gestiona Google OAuth con PKCE.
+- Guarda proyectos en la tabla `stories`.
+- Sube `cover.jpg` y `target.mind` al bucket `stories`.
+- Depende de políticas RLS para separar la escritura de cada autor.
+
+## Desarrollo local
+
+Requisitos: Node.js moderno y un navegador con WebGL y acceso a cámara.
 
 ```bash
-cd webr-storyteller
 npm start
 ```
 
-Luego abre en tu navegador:
-```
-http://localhost:8080
-```
+Abrir `http://localhost:8080/crear`. La cámara solo funciona en `localhost` o mediante HTTPS.
 
-### 2. Flujo de uso
+## Validación recomendada
 
-1. **Abre la aplicación** en dispositivo móvil (requiere HTTPS o localhost)
-2. **Sube una imagen target** usando el botón "Subir Imagen Target"
-3. **La imagen se procesa** (optimización automática)
-4. **Mueve la cámara** para detectar la imagen en el mundo real
-5. **Observa el parallax** 3D respondiendo a los movimientos del dispositivo
+1. Publicar una obra rica en detalles y con buen contraste.
+2. Descargar la nueva Lámina Maestra.
+3. Imprimirla preferentemente en papel mate o mostrarla completa en otra pantalla.
+4. Escanear el QR desde un segundo dispositivo.
+5. Conceder permiso de cámara y mantener visible todo el marco.
+6. Verificar detección, anclaje, transición, pérdida y recuperación.
 
-### 3. Requisitos
+## Limitaciones del MVP
 
-- ✅ Navegador moderno (Chrome, Firefox, Safari mobile)
-- ✅ Cámara web / frontal del dispositivo
-- ✅ Soporte DeviceOrientation (giroscopio)
-- ✅ Conexión HTTPS o localhost (requerimiento de cámara)
+- Un solo target por experiencia.
+- La profundidad se estima a partir de la imagen; no utiliza un depth map semántico.
+- Composición, compilación MindAR y PDF se ejecutan en el navegador del autor.
+- El resultado depende de la iluminación, la impresión, el enfoque y la capacidad del dispositivo.
+- No existe todavía un panel de listado, edición o analítica de obras.
 
-## 🔧 Componentes Core
+## Próximos pasos
 
-### MindARManager
-Integración ligera de MindAR en modo image-target.
+- Procesamiento asíncrono de láminas y targets en backend.
+- Panel de obras publicadas y versionado.
+- Métricas anónimas de apertura y detección.
+- Plantillas visuales seleccionables.
+- Organizaciones, equipos y permisos para editoriales.
+- Pruebas end-to-end en una matriz de navegadores móviles.
 
-**Métodos principales:**
-- `init()` - Inicializa cámara y tracking
-- `addImageTarget(url)` - Agrega nuevo target
-- `getTrackedTargets()` - Obtiene targets actuales
-- `stop()` - Detiene tracking
+## Seguridad
 
-**Eventos emitidos:**
-- `mindar:initialized`
-- `mindar:camera-ready`
-- `mindar:target-detected`
-- `mindar:target-lost`
+- La aplicación utiliza una clave publicable de Supabase en el navegador.
+- Nunca debe incorporarse una `service_role` key al frontend o al repositorio.
+- Las escrituras están protegidas mediante RLS y carpetas por autor en Storage.
 
-### ParallaxEngine
-Motor 2.5D sin WebGL que usa CSS transforms y DeviceMotion.
+## Autor
 
-**Métodos principales:**
-- `init()` - Inicializa motor
-- `createLayer(config)` - Crea capa parallax
-- `updateLayerDepth(id, depth)` - Ajusta profundidad
-- `animateToTarget(position, duration)` - Anima a posición
+Creado por [Lic. Lucas Walter González](https://www.linkedin.com/in/lucas-walter-gonzalez).
 
-**Características:**
-- Perspectiva CSS 3D
-- Tracking de DeviceOrientation
-- Animaciones suaves con easing
-
-### ImageProcessor
-Procesa y optimiza imágenes en cliente.
-
-**Métodos principales:**
-- `processImageFile(file)` - Procesa archivo
-- `validateFile(file)` - Valida formato y tamaño
-- `resizeImage(img)` - Redimensiona automáticamente
-- `optimizeImage(canvas)` - Comprime con Canvas
-
-**Características:**
-- Validación de formato (JPEG, PNG, WebP)
-- Redimensionamiento automático
-- Compresión automática con Canvas 2D
-- Reducción de ruido
-
-## 📱 Configuración por Dispositivo
-
-### iOS (Safari)
-Requiere solicitar permisos de cámara y orientación.
-
-```javascript
-// En DeviceOrientationEvent.requestPermission()
-// Solicita permiso explícitamente
-```
-
-### Android (Chrome)
-Soportado nativamente, requiere HTTPS o localhost.
-
-## 🎨 Personalización
-
-### Ajustar sensibilidad parallax
-
-En `src/app.js`:
-```javascript
-this.parallax = new ParallaxEngine({
-  depthScale: 0.05,              // Escala de profundidad
-  rotationSensitivity: 0.8,      // Sensibilidad giroscopio
-  baseZoom: 1,                   // Zoom inicial
-});
-```
-
-### Cambiar targets iniciales
-
-En `src/app.js` método `createDemoLayers()`:
-```javascript
-this.parallax.createLayer({
-  id: 'layer-custom',
-  depth: 0.5,                    // 0-1 (lejano-cercano)
-  scale: 0.8,
-  content: `<div>...</div>`,
-});
-```
-
-## 📊 Debug
-
-Abre la consola del navegador (F12) para ver logs:
-
-```
-🚀 Inicializando WebAR Storyteller...
---- INICIALIZANDO MÓDULOS CORE ---
-✅ ImageProcessor inicializado
-✅ ParallaxEngine inicializado
-✅ MindARManager inicializado
-```
-
-## ⚠️ Limitaciones Actuales
-
-- Single image target por vez (configurable en MindARManager)
-- Parallax basado en CSS (no soporta texturas complejas)
-- Requisito de permisos de cámara explícitos
-- Mejor rendimiento en dispositivos con GPU
-
-## 🔮 Próximos Pasos
-
-- [ ] Múltiples targets simultáneos
-- [ ] Animaciones basadas en tracking
-- [ ] Capas con contenido HTML/Canvas
-- [ ] Estadísticas de performance
-- [ ] Integración con WASM para procesamiento más rápido
-
-## 📝 Licencia
+## Licencia
 
 MIT
-
----
-
-**Construido con:**
-- MindAR SDK
-- CSS 3D Transforms
-- Canvas 2D nativo
-- DeviceOrientation API
-- Vanilla JavaScript (ES6 Modules)
