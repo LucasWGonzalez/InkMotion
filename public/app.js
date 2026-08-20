@@ -182,6 +182,14 @@ class InkMotionApp {
       const pdfBlob = await this.sheetGenerator.createPdf(sheet.jpegDataUrl, sheet.pageSizeMm);
       const config = { depthStrength: 0.08, animation: 'magic-breathe', loopSeconds: 5, anchor: 'mindar', contentRect: sheet.contentRect, sheetDpi: sheet.dpi };
       const project = await this.store.saveProject({ id: projectId, title, imageBlob: this.pendingProject.imageBlob, targetBlob: compiled.blob, config });
+      this.setBuildState('publishing', 'Generando relieve 3D con inteligencia artificial…', 88);
+      try {
+        await this.store.generateDepth(project.id);
+      } catch (depthError) {
+        // Depth generation is an enhancement. Publishing remains usable with the
+        // deterministic luminance fallback if the external model is unavailable.
+        console.warn('[InkMotion/Depth] Se usará el relieve local de contingencia.', depthError);
+      }
       this.masterSheetPdfUrl = URL.createObjectURL(pdfBlob);
       document.getElementById('public-link').value = url;
       document.getElementById('btn-open-story').href = url;
@@ -310,7 +318,7 @@ class InkMotionApp {
       document.getElementById('btn-camera-mode').addEventListener('click', () => this.toggleReaderMode());
       this.parallax = new ParallaxEngine({ container: '#ar-overlay', depthStrength: Number(project.config?.depthStrength) || 0.08, contentRect: project.config?.contentRect });
       await this.parallax.init();
-      await this.parallax.setTargetImage(project.imageUrl);
+      await this.parallax.setTargetImage(project.imageUrl, project.depthUrl);
       this.mindAR = new MindARManager({ video: '#video-stream' });
       const ready = await this.mindAR.init();
       if (!ready) throw new Error('No se pudo iniciar la cámara. Revisá sus permisos.');
