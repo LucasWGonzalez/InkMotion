@@ -105,13 +105,8 @@ class ParallaxEngine {
     this.imageMesh = new THREE.Mesh(geometry, this.storyMaterial);
     this.imageMesh.position.z = 0.018;
 
-    const frameGeometry = new THREE.PlaneGeometry(planeWidth * 1.025, planeHeight * 1.035);
-    const frameMaterial = new THREE.MeshBasicMaterial({ color: 0x806cf5, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
-    this.frameMesh = new THREE.Mesh(frameGeometry, frameMaterial);
-    this.frameMesh.position.z = -0.018;
-
     this.particles = this.createMagicParticles({ width: planeWidth, height: planeHeight });
-    this.storyGroup.add(this.frameMesh, this.imageMesh, this.particles);
+    this.storyGroup.add(this.imageMesh, this.particles);
     const offsetX = contentRect ? contentRect.x + contentRect.width / 2 - 0.5 : 0;
     const offsetY = contentRect
       ? (0.5 - contentRect.y - contentRect.height / 2) * contentRect.targetAspect
@@ -129,61 +124,85 @@ class ParallaxEngine {
   }
 
   createDepthMaterial(texture) {
+    const textureWidth = texture.image.naturalWidth || texture.image.width || 1;
+    const textureHeight = texture.image.naturalHeight || texture.image.height || 1;
     return new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       uniforms: {
         uTexture: { value: texture },
         uDepthStrength: { value: this.config.depthStrength },
-        uTime: { value: 0 },
         uReveal: { value: 0 },
+        uTexelSize: { value: new THREE.Vector2(1 / textureWidth, 1 / textureHeight) },
       },
       vertexShader: `
         uniform sampler2D uTexture;
         uniform float uDepthStrength;
-        uniform float uTime;
         uniform float uReveal;
+        uniform vec2 uTexelSize;
         varying vec2 vUv;
-        varying float vDepth;
-        varying vec3 vViewDirection;
+        varying float vHeight;
 
-        float depthAt(vec2 coord) {
-          vec3 color = texture2D(uTexture, coord).rgb;
-          float luminance = dot(color, vec3(0.299, 0.587, 0.114));
-          return smoothstep(0.12, 0.88, luminance);
+        float lumaAt(vec2 coord) {
+          vec3 color = texture2D(uTexture, clamp(coord, vec2(0.0), vec2(1.0))).rgb;
+          return dot(color, vec3(0.2126, 0.7152, 0.0722));
         }
 
         void main() {
           vUv = uv;
-          vDepth = depthAt(uv);
+          float center = lumaAt(uv);
+          float left = lumaAt(uv - vec2(uTexelSize.x, 0.0));
+          float right = lumaAt(uv + vec2(uTexelSize.x, 0.0));
+          float down = lumaAt(uv - vec2(0.0, uTexelSize.y));
+          float up = lumaAt(uv + vec2(0.0, uTexelSize.y));
+          float edge = clamp(length(vec2(right - left, up - down)) * 2.2, 0.0, 1.0);
+
+          // Zero is the paper plane: dark ink remains attached to it. Midtones,
+          // highlights and luminance edges rise without any negative displacement.
+          float luminanceHeight = pow(smoothstep(0.16, 0.88, center), 1.35);
+          vHeight = clamp(max(luminanceHeight, edge * 0.42), 0.0, 1.0);
           vec3 displaced = position;
-          float organic = sin((uv.x * 3.0 + uv.y * 2.0) * 6.28318 + uTime * 6.28318) * 0.004;
-          displaced.z += ((vDepth - 0.45) * uDepthStrength + organic * vDepth) * uReveal;
-          vec4 viewPosition = modelViewMatrix * vec4(displaced, 1.0);
-          vViewDirection = normalize(-viewPosition.xyz);
-          gl_Position = projectionMatrix * viewPosition;
+          displaced.z += vHeight * uDepthStrength * uReveal;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
         }
       `,
       fragmentShader: `
         uniform sampler2D uTexture;
         uniform float uReveal;
+        uniform vec2 uTexelSize;
         varying vec2 vUv;
-        varying float vDepth;
-        varying vec3 vViewDirection;
+        varying float vHeight;
+
+        float lumaAt(vec2 coord) {
+          vec3 color = texture2D(uTexture, clamp(coord, vec2(0.0), vec2(1.0))).rgb;
+          return dot(color, vec3(0.2126, 0.7152, 0.0722));
+        }
 
         void main() {
-          float safeZ = max(abs(vViewDirection.z), 0.25);
-          vec2 cameraParallax = (vViewDirection.xy / safeZ) * (vDepth - 0.5) * 0.018;
-          vec2 sampleUv = clamp(vUv + cameraParallax, vec2(0.002), vec2(0.998));
-          vec4 color = texture2D(uTexture, sampleUv);
-          float light = 0.96 + vDepth * 0.07;
-          float sweepPosition = uReveal * 1.45 - 0.18;
-          float sweep = 1.0 - smoothstep(0.0, 0.075, abs((vUv.x + vUv.y * 0.38) - sweepPosition));
-          vec3 revealGlow = vec3(0.40, 0.29, 0.95) * sweep * 0.34;
-          float alpha = color.a * smoothstep(0.0, 0.16, uReveal);
-          gl_FragColor = vec4(color.rgb * light + revealGlow, alpha);
+          // Sample the original UV exactly once: no chromatic offset or doubled ink.
+          vec4 color = texture2D(uTexture, vUv);
+
+          // Build a neutral pseudo-normal from the same grayscale height field.
+          float left = lumaAt(vUv - vec2(uTexelSize.x, 0.0));
+          float right = lumaAt(vUv + vec2(uTexelSize.x, 0.0));
+          float down = lumaAt(vUv - vec2(0.0, uTexelSize.y));
+          float up = lumaAt(vUv + vec2(0.0, uTexelSize.y));
+          vec3 normal = normalize(vec3((left - right) * 2.4, (down - up) * 2.4, 0.34));
+          float diffuse = clamp(dot(normal, normalize(vec3(-0.32, 0.42, 0.85))), 0.0, 1.0);
+          float neutralLight = mix(0.94, 1.055, diffuse) * mix(0.985, 1.025, vHeight);
+
+          // JPEG has no useful alpha channel. Fade only the perimeter to stop
+          // displaced geometry and ClampToEdge pixels bleeding outside the artwork.
+          vec2 edgeDistance = min(vUv, vec2(1.0) - vUv);
+          float edgeMask = smoothstep(0.0, 0.018, min(edgeDistance.x, edgeDistance.y));
+          float revealAlpha = smoothstep(0.0, 0.14, uReveal);
+          float alpha = color.a * edgeMask * revealAlpha;
+
+          // Multiplicative neutral lighting preserves hue and saturation exactly.
+          gl_FragColor = vec4(color.rgb * neutralLight, alpha);
         }
       `,
       transparent: true,
+      depthWrite: true,
     });
   }
 
@@ -340,11 +359,7 @@ class ParallaxEngine {
         const revealEase = 1 - Math.pow(1 - this.revealProgress, 3);
         const breathing = 1 + Math.sin(angle) * 0.005;
         this.storyGroup.scale.setScalar((0.985 + revealEase * 0.015) * breathing);
-        if (this.storyMaterial) {
-          this.storyMaterial.uniforms.uTime.value = loopPhase;
-          this.storyMaterial.uniforms.uReveal.value = revealEase;
-        }
-        if (this.frameMesh) this.frameMesh.material.opacity = 0.4 * revealEase;
+        if (this.storyMaterial) this.storyMaterial.uniforms.uReveal.value = revealEase;
         this.updateParticles(loopPhase);
       }
       this.renderer.render(this.scene, this.camera);

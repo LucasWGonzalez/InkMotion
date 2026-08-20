@@ -74,8 +74,10 @@ export default class MasterSheetGenerator {
     const sideMargin = Math.round(shortest * 0.06);
     const topMargin = sideMargin;
     const qrSize = Math.round(Math.min(420, Math.max(180, shortest * 0.135)));
-    const bottomMargin = Math.max(Math.round(shortest * 0.18), qrSize + Math.round(unit * 3));
     const frameWidth = Math.max(5, Math.round(shortest * 0.006));
+    const frameGap = Math.max(frameWidth * 7, unit * 0.55);
+    const technicalBandHeight = Math.max(Math.round(shortest * 0.18), qrSize + Math.round(unit * 3));
+    const bottomMargin = Math.ceil(frameGap + technicalBandHeight);
     const qrCanvas = document.createElement('canvas');
     await renderStoryQR(qrCanvas, publicUrl, { width: qrSize, margin: 3, errorCorrectionLevel: 'M' });
 
@@ -98,8 +100,8 @@ export default class MasterSheetGenerator {
     context.fillRect(content.x, content.y, content.width, content.height);
     context.drawImage(illustration, content.x, content.y, content.width, content.height);
 
-    // Reserve enough paspartú for the complete L arms: technical marks never touch the artwork.
-    const frameGap = Math.max(frameWidth * 7, unit * 0.55);
+    // The frame lives entirely in the paspartú. Its lower reserve is separate
+    // from the information band so neither the line nor the L arms cross the copy or QR.
     const frame = {
       x: content.x - frameGap,
       y: content.y - frameGap,
@@ -120,11 +122,11 @@ export default class MasterSheetGenerator {
     drawFiducialCorner(context, left, bottom, 1, -1, frameWidth);
     drawFiducialCorner(context, right, bottom, -1, -1, frameWidth);
 
-    const panelPadding = unit * 0.7;
+    const panelPadding = unit * 1.05;
     const brandFont = Math.max(26, Math.round(unit * 1.35));
     const detailFont = Math.max(15, Math.round(unit * 0.72));
     const titleFont = Math.max(17, Math.round(unit * 0.82));
-    const footerTop = content.y + content.height;
+    const footerTop = content.y + content.height + frameGap + frameWidth / 2;
     const brandX = sideMargin;
     const brandY = footerTop + panelPadding;
     const textWidth = Math.max(unit * 18, canvas.width - sideMargin * 2 - qrSize - unit * 3);
@@ -141,7 +143,7 @@ export default class MasterSheetGenerator {
 
     const qr = {
       x: canvas.width - sideMargin - qrSize,
-      y: footerTop + Math.max(unit, (bottomMargin - qrSize) / 2),
+      y: footerTop + Math.max(unit, (technicalBandHeight - qrSize) / 2),
       size: qrSize,
     };
     context.fillStyle = '#fff';

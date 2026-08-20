@@ -326,3 +326,8 @@ FIN DEL REGISTRO
 - La detección despliega progresivamente relieve, escala, brillo y partículas, con un barrido violeta dentro del shader y respuesta háptica breve cuando el dispositivo la admite.
 - El lector suma una guía animada de encuadre y tolera pérdidas de tracking de 400 ms antes de iniciar un desvanecimiento, evitando cortes bruscos por microtemblores.
 - El target .mind inmutable ahora aprovecha la caché del navegador para acelerar aperturas repetidas.
+2026-08-20 — Corrección cromática y relieve neutro
+- Se eliminó la suma violeta del shader y el plano decorativo sobredimensionado que teñían la tinta oscura y los bordes de la obra.
+- El relieve usa un height field no negativo obtenido de luminancia Rec. 709 y gradientes de luminancia: la tinta oscura permanece en el papel y las zonas claras o de borde se elevan.
+- El color se muestrea sin desplazamiento UV, el sombreado es multiplicativo y acromático, y una máscara perimetral suave evita sangrado de la textura fuera de la ilustración.
+- La banda informativa de la Lámina Maestra reserva ahora su propia altura debajo del marco: título y QR quedan completamente separados de la línea y de los fiduciales inferiores.
