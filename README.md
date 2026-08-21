@@ -6,11 +6,11 @@ InkMotion convierte una imagen y su animación breve en una obra física aumenta
 
 1. Inicia sesión con Google en `/crear`.
 2. Sube la imagen original (JPG, PNG, WebP o HEIC; hasta 25 MB).
-3. Sube un video loop MP4 H.264 de 3 a 8 segundos y hasta 15 MB.
+3. Sube un video loop MP4 H.264 de 3 a 10 segundos y hasta 15 MB.
 4. InkMotion verifica automáticamente duración, resolución y relación de aspecto.
 5. Publica la obra y descarga `InkMotion_Lamina_Final.pdf` a 300 DPI.
 
-La imagen y el video deben conservar la misma proporción y encuadre. Se recomienda un loop de 5 segundos, sin movimiento de cámara y con cambios internos sutiles.
+La imagen y el video deben conservar la misma proporción y encuadre. Se recomienda un loop de 8 segundos, sin movimiento de cámara y con cambios internos sutiles. Para trabajar con Veo, conviene preparar la imagen en 16:9 o 9:16 antes de animarla, porque otras proporciones pueden ser recortadas o reencuadradas por el generador.
 
 ## Experiencia del lector
 
@@ -46,7 +46,7 @@ La generación de profundidad con Replicate fue retirada del flujo activo. El pr
 |---|---|
 | Formato | MP4 |
 | Códec recomendado | H.264 |
-| Duración | 3–8 segundos |
+| Duración | 3–10 segundos |
 | Peso máximo | 15 MB |
 | Resolución máxima | 1920 px por lado |
 | Proporción | Debe coincidir con la imagen (tolerancia 2,5 %) |

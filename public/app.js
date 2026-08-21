@@ -221,11 +221,19 @@ class InkMotionApp {
   }
 
   async copyLoopPrompt() {
-    const prompt = 'Anima esta imagen en un loop continuo de 5 segundos. Mantén exactamente el encuadre, la composición, los colores y la posición de todos los elementos. Cámara completamente fija, sin zoom, paneo ni rotación. Anima únicamente elementos internos con movimientos sutiles. El primer y último fotograma deben coincidir.';
+    const prompt = `Use the uploaded image as the strict and exclusive visual reference for the entire video. Create a subtle seamless loop while preserving the source image exactly.
+
+LOCKED CAMERA AND COMPOSITION: keep the camera completely static. Preserve the exact framing, crop, aspect ratio, perspective, horizon, scale, colors, lighting, background and position of every existing element from the source image.
+
+ANIMATION: animate only small internal details that are already visible in the image, using subtle, natural and cyclical motion. Keep the principal subject and all structural shapes in their original positions. The motion must return smoothly to its starting state, with the final frame visually matching the first frame.
+
+STRICT RESTRICTIONS: do not zoom, pan, tilt, rotate, dolly, orbit, reframe or move the camera. Do not crop, stretch or change the aspect ratio. Do not add, remove, replace, redesign or hallucinate objects, characters, textures, limbs, facial features, text or background elements. Do not change the art style, palette, anatomy, proportions, geometry or scene layout. No cuts, transitions, scene changes, morphing, flicker or sudden movement. No subtitles, logos or new text.
+
+OUTPUT: one continuous 8-second MP4 shot, fixed camera, seamless loop, faithful to the uploaded image. No audio.`;
     await navigator.clipboard.writeText(prompt);
     const button = document.getElementById('btn-copy-prompt');
     button.textContent = 'Prompt copiado';
-    window.setTimeout(() => { button.textContent = 'Copiar prompt para generar el loop'; }, 1800);
+    window.setTimeout(() => { button.textContent = 'Copiar prompt restrictivo para Veo'; }, 1800);
   }
 
   async publishStory(event) {

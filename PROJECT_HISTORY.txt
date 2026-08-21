@@ -351,3 +351,8 @@ FIN DEL REGISTRO
 - La activación añade un despegue sutil con elevación Z, escala aproximada del 2,8 %, sombra y fundido perimetral.
 - Se añadió un mini tutorial de tres pasos y un prompt copiable para generar loops con cámara fija.
 - Las publicaciones del esquema anterior se conservan, pero el visor solicita republicarlas con su video loop.
+2026-08-21 — Compatibilidad ampliada con Google Veo
+
+- El máximo de duración del video se amplió de 8 a 10 segundos; se recomiendan 8 segundos por ser el formato más compatible entre las variantes actuales de Veo.
+- El mini tutorial aclara que Veo funciona de forma más predecible con imágenes 16:9 o 9:16.
+- El prompt copiable fue reemplazado por una versión restrictiva en inglés que bloquea cámara, encuadre, proporción, composición, paleta y elementos de la imagen original.
