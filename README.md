@@ -1,164 +1,75 @@
 # InkMotion
 
-InkMotion convierte ilustraciones, historietas, portadas y pósters en experiencias WebAR accesibles desde el navegador, sin instalar una aplicación.
+InkMotion convierte una imagen y su animación breve en una obra física aumentada, anclada al papel y lista para imprimir.
 
-El autor publica una obra y recibe una **Lámina Maestra lista para imprimir**. La lámina integra la ilustración, un paspartú técnico, un marco de anclaje, fiduciales en las esquinas y un QR de acceso. MindAR reconoce la lámina completa y Three.js proyecta sobre ella el efecto de profundidad 2.5D.
+## Flujo del autor
 
-## Producción
+1. Inicia sesión con Google en `/crear`.
+2. Sube la imagen original (JPG, PNG, WebP o HEIC; hasta 25 MB).
+3. Sube un video loop MP4 H.264 de 3 a 8 segundos y hasta 15 MB.
+4. InkMotion verifica automáticamente duración, resolución y relación de aspecto.
+5. Publica la obra y descarga `InkMotion_Lamina_Final.pdf` a 300 DPI.
 
-- Aplicación: https://ink-motion-pied.vercel.app
-- Panel de autor: https://ink-motion-pied.vercel.app/crear
-- Repositorio: https://github.com/LucasWGonzalez/InkMotion
-- Rama productiva: `master`
+La imagen y el video deben conservar la misma proporción y encuadre. Se recomienda un loop de 5 segundos, sin movimiento de cámara y con cambios internos sutiles.
 
-## Flujo del producto
+## Experiencia del lector
 
-### Autor
+El QR abre `/v/:id` en el navegador. MindAR reconoce la Lámina Maestra completa y mantiene la animación adherida a su perspectiva. Al detectar el marcador, el video aparece desde la superficie con una elevación, escala y sombra suaves; se reproduce en loop mientras la lámina está visible y se pausa al perderla.
 
-1. Inicia sesión con Google OAuth.
-2. Sube una ilustración y escribe el título de la obra.
-3. InkMotion optimiza la textura y compone la Lámina Maestra conservando la proporción original.
-4. El compilador oficial de MindAR procesa la lámina completa y genera un target `.mind`.
-5. Se guardan la ilustración, el target y la configuración en Supabase.
-6. El autor descarga un único archivo `InkMotion_Lamina_Final.pdf` a 300 DPI.
+Esto diferencia InkMotion de un QR enlazado a un reproductor: el contenido no se abre aparte, sino que permanece registrado sobre la obra física mientras el teléfono se mueve.
 
-### Lector
+## Lámina Maestra
 
-1. Escanea el QR corto `/v/:id` de la lámina.
-2. InkMotion descarga la obra y el target `.mind` ya compilado.
-3. El lector habilita la cámara y encuadra la lámina completa.
-4. MindAR detecta el target con `targetIndex: 0`.
-5. Three.js ancla la ilustración y activa la transición **“La obra cobró vida”**.
-
-## Características actuales
-
-- Lámina dinámica: cuadrada, vertical u horizontal según la obra.
-- Paspartú neutro con título y QR fuera de la ilustración.
-- QR corto con corrección de errores Level M.
-- PDF de página personalizada calculado a 300 DPI.
-- Compilación `.mind` en el navegador del autor.
-- Tracking físico con MindAR Image Tracking 1.2.5.
-- Render WebGL con Three.js 0.168.0.
-- Shader de profundidad estimada por luminancia.
-- Interpolación de posición, rotación y escala para reducir jitter.
-- Partículas con `AdditiveBlending`, respiración sutil y barrido de luz.
-- Tolerancia de 400 ms ante microcortes de tracking.
-- Guía animada de encuadre y respuesta háptica compatible.
-- Autenticación Google OAuth, base de datos y Storage mediante Supabase.
-- Diagnóstico visible de cámara, descarga, compilación y tracking.
+- Respeta la proporción real de la obra.
+- Agrega paspartú sin invadir la ilustración.
+- Incluye marco y esquinas fiduciales en L.
+- Integra un QR corto en el margen inferior.
+- Compila la lámina completa como `target.mind`.
+- Exporta PDF listo para impresión a 300 DPI.
 
 ## Arquitectura
 
-InkMotion es una aplicación web modular en JavaScript, HTML y CSS, sin React ni framework de interfaz.
+- Frontend modular en JavaScript.
+- Three.js `0.168.0` para el video AR y la transición de despegue.
+- MindAR `1.2.5` para compilación y tracking.
+- Supabase Auth con Google OAuth.
+- Supabase Database y Storage para proyectos y archivos.
+- Vercel para hosting y rutas `/crear` y `/v/:id`.
 
-```text
-inkmotion/
-├── public/
-│   ├── index.html
-│   ├── app.js
-│   ├── core/
-│   │   ├── ImageProcessor.js
-│   │   ├── MasterSheetGenerator.js
-│   │   ├── MindARLoader.js
-│   │   ├── MindARManager.js
-│   │   └── ParallaxEngine.js
-│   ├── services/
-│   │   └── ProjectStore.js
-│   ├── utils/
-│   │   ├── EventBus.js
-│   │   └── QRGenerator.js
-│   └── css/
-│       ├── global.css
-│       ├── parallax.css
-│       ├── routes.css
-│       └── ui.css
-├── supabase/
-│   └── migrations/
-├── server.js
-├── vercel.json
-├── PROJECT_HISTORY.txt
-└── README.md
-```
+Cada publicación almacena `cover.jpg`, `animation.mp4`, `target.mind` y una fila en `stories` con `image_path`, `video_path`, `target_path` y configuración.
 
-## Componentes principales
+La generación de profundidad con Replicate fue retirada del flujo activo. El producto utiliza un único modelo de creación basado en imagen + video para reducir coste, espera y complejidad.
 
-### `MasterSheetGenerator`
+## Validaciones del video
 
-- Lee las dimensiones reales de la ilustración.
-- Calcula el lienzo de impresión sin forzar A4 ni deformar la obra.
-- Dibuja paspartú, marco sutil y cuatro fiduciales en “L”.
-- Ubica título y QR en la banda inferior externa.
-- Genera JPEG de alta resolución y PDF personalizado.
-
-### `MindARManager`
-
-- Carga el compilador/runtime de MindAR con CDNs alternativos.
-- Compila la Lámina Maestra como target único.
-- Descarga y valida el `.mind` publicado.
-- Sincroniza las dimensiones reales del video con el `Controller`.
-- Emite eventos de detección, pérdida, progreso y errores.
-
-### `ParallaxEngine`
-
-- Renderiza la obra en un plano subdividido de Three.js.
-- Aplica relieve 2.5D mediante shader.
-- Suaviza la matriz de tracking con `lerp` y `slerp`.
-- Controla barrido de luz, entrada de profundidad y partículas.
-- Mantiene el efecto durante pérdidas mínimas para evitar parpadeos.
-
-### `ProjectStore`
-
-- Gestiona Google OAuth con PKCE.
-- Guarda proyectos en la tabla `stories`.
-- Sube `cover.jpg` y `target.mind` al bucket `stories`.
-- Depende de políticas RLS para separar la escritura de cada autor.
+| Propiedad | Regla |
+|---|---|
+| Formato | MP4 |
+| Códec recomendado | H.264 |
+| Duración | 3–8 segundos |
+| Peso máximo | 15 MB |
+| Resolución máxima | 1920 px por lado |
+| Proporción | Debe coincidir con la imagen (tolerancia 2,5 %) |
+| Reproducción | Silenciosa, automática y en loop |
 
 ## Desarrollo local
-
-Requisitos: Node.js moderno y un navegador con WebGL y acceso a cámara.
 
 ```bash
 npm start
 ```
 
-Abrir `http://localhost:8080/crear`. La cámara solo funciona en `localhost` o mediante HTTPS.
+Abrir `http://localhost:3000/crear`. La cámara requiere HTTPS fuera de `localhost`.
 
-## Validación recomendada
+## Verificación recomendada
 
-1. Publicar una obra rica en detalles y con buen contraste.
-2. Descargar la nueva Lámina Maestra.
-3. Imprimirla preferentemente en papel mate o mostrarla completa en otra pantalla.
-4. Escanear el QR desde un segundo dispositivo.
-5. Conceder permiso de cámara y mantener visible todo el marco.
-6. Verificar detección, anclaje, transición, pérdida y recuperación.
-
-## Limitaciones del MVP
-
-- Un solo target por experiencia.
-- Las obras nuevas solicitan un mapa de profundidad semántico a Depth Anything V2 mediante una Supabase Edge Function. El resultado queda cacheado en Storage y el visor conserva el cálculo local por luminancia como contingencia si Replicate no está disponible.
-- Composición, compilación MindAR y PDF se ejecutan en el navegador del autor.
-- El resultado depende de la iluminación, la impresión, el enfoque y la capacidad del dispositivo.
-- No existe todavía un panel de listado, edición o analítica de obras.
-
-## Próximos pasos
-
-- Procesamiento asíncrono de láminas y targets en backend.
-- Panel de obras publicadas y versionado.
-- Métricas anónimas de apertura y detección.
-- Plantillas visuales seleccionables.
-- Organizaciones, equipos y permisos para editoriales.
-- Pruebas end-to-end en una matriz de navegadores móviles.
-
-## Seguridad
-
-- La aplicación utiliza una clave publicable de Supabase en el navegador.
-- Nunca debe incorporarse una `service_role` key al frontend o al repositorio.
-- Las escrituras están protegidas mediante RLS y carpetas por autor en Storage.
+1. Probar una obra cuadrada, una vertical y una horizontal.
+2. Confirmar rechazo de videos fuera del rango de duración o peso.
+3. Confirmar rechazo cuando imagen y video no comparten proporción.
+4. Publicar con una cuenta Google.
+5. Descargar e imprimir la Lámina Maestra sin escalar.
+6. Escanear QR, autorizar cámara y encuadrar la lámina completa.
+7. Verificar reproducción, anclaje, elevación, pérdida y recuperación del target.
 
 ## Autor
 
 Creado por [Lic. Lucas Walter González](https://www.linkedin.com/in/lucas-walter-gonzalez).
-
-## Licencia
-
-MIT

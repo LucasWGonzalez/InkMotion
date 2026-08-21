@@ -4,6 +4,7 @@ import ImageProcessor from './core/ImageProcessor.js';
 import ProjectStore from './services/ProjectStore.js';
 import EventBus from './utils/EventBus.js';
 import MasterSheetGenerator from './core/MasterSheetGenerator.js';
+import VideoProcessor from './core/VideoProcessor.js';
 
 const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
 const OAUTH_DRAFT_DB = 'inkmotion-oauth-draft';
@@ -47,6 +48,7 @@ class InkMotionApp {
   constructor() {
     this.store = new ProjectStore();
     this.processor = new ImageProcessor({ maxFileSize: 25 * 1024 * 1024, targetQuality: 0.82 });
+    this.videoProcessor = new VideoProcessor();
     this.sheetGenerator = new MasterSheetGenerator();
     this.pendingProject = null;
     this.lastSelectedFile = null;
@@ -74,6 +76,8 @@ class InkMotionApp {
     document.getElementById('btn-google-auth').addEventListener('click', () => this.loginWithGoogle());
     document.getElementById('btn-sign-out').addEventListener('click', async () => { await this.store.signOut(); window.location.reload(); });
     document.getElementById('story-file').addEventListener('change', (event) => this.prepareStory(event));
+    document.getElementById('story-video').addEventListener('change', (event) => this.prepareVideo(event));
+    document.getElementById('btn-copy-prompt').addEventListener('click', () => this.copyLoopPrompt());
     document.getElementById('publish-form').addEventListener('submit', (event) => this.publishStory(event));
     document.getElementById('btn-copy-link').addEventListener('click', () => this.copyPublishedLink());
     document.getElementById('btn-download-sheet').addEventListener('click', () => this.downloadMasterSheet());
@@ -126,13 +130,19 @@ class InkMotionApp {
         return request;
       });
       if (!draft || Date.now() - draft.savedAt > 2 * 60 * 60 * 1000) return;
-      const imageUrl = URL.createObjectURL(draft.imageBlob);
-      this.pendingProject = { id: draft.id, imageBlob: draft.imageBlob, imageUrl };
+      const imageUrl = draft.imageBlob ? URL.createObjectURL(draft.imageBlob) : null;
+      const videoUrl = draft.videoBlob ? URL.createObjectURL(draft.videoBlob) : null;
+      this.pendingProject = { id: draft.id, imageBlob: draft.imageBlob, imageUrl, imageDimensions: draft.imageDimensions, videoBlob: draft.videoBlob, videoUrl, videoMetadata: draft.videoMetadata };
       document.getElementById('story-title').value = draft.title || '';
-      document.getElementById('author-preview').src = imageUrl;
+      if (imageUrl) document.getElementById('author-preview').src = imageUrl;
+      if (videoUrl) {
+        const preview = document.getElementById('author-video-preview');
+        preview.src = videoUrl;
+        preview.hidden = false;
+        preview.play().catch(() => {});
+      }
       document.getElementById('preview-wrap').hidden = false;
-      document.getElementById('btn-publish').disabled = false;
-      this.setBuildState('ready', 'Proyecto recuperado después de iniciar sesión.', 100);
+      this.updateMediaReadiness('Proyecto recuperado después de iniciar sesión.');
     } catch (error) { console.warn('No se pudo recuperar el proyecto temporal de OAuth.', error); }
   }
 
@@ -148,11 +158,14 @@ class InkMotionApp {
       const processed = await this.processor.processImageFile(file, `story-${Date.now()}`);
       document.getElementById('author-preview').src = processed.url;
       document.getElementById('preview-wrap').hidden = false;
-      this.pendingProject = { imageBlob: processed.blob, imageUrl: processed.url };
-      this.setBuildState('ready', 'Ilustración lista para crear la lámina maestra.', 100);
-      publish.disabled = false;
+      this.pendingProject = { ...(this.pendingProject || {}), imageBlob: processed.blob, imageUrl: processed.url, imageDimensions: processed.dimensions };
+      this.updateMediaReadiness();
     } catch (error) {
-      this.pendingProject = null;
+      if (this.pendingProject) {
+        delete this.pendingProject.imageBlob;
+        delete this.pendingProject.imageUrl;
+        delete this.pendingProject.imageDimensions;
+      }
       const message = this.errorMessage(error, 'No se pudo procesar esta ilustración.');
       this.setBuildState('error', message, 0);
       if (this.isNetworkError(error)) this.offerRetry('prepare');
@@ -161,9 +174,63 @@ class InkMotionApp {
     }
   }
 
+  async prepareVideo(eventOrFile) {
+    const file = eventOrFile instanceof File ? eventOrFile : eventOrFile?.target?.files?.[0];
+    if (!file) return;
+    this.clearRetry();
+    document.getElementById('btn-publish').disabled = true;
+    this.setBuildState('processing', 'Verificando duración, peso y proporción del video…', 35);
+    try {
+      const inspected = await this.videoProcessor.inspect(file);
+      this.pendingProject = { ...(this.pendingProject || {}), videoBlob: inspected.blob, videoUrl: inspected.url, videoMetadata: { duration: inspected.duration, width: inspected.width, height: inspected.height } };
+      const preview = document.getElementById('author-video-preview');
+      preview.src = inspected.url;
+      preview.hidden = false;
+      document.getElementById('preview-wrap').hidden = false;
+      preview.play().catch(() => {});
+      this.updateMediaReadiness();
+    } catch (error) {
+      this.setBuildState('error', this.errorMessage(error, 'No se pudo preparar el video.'), 0);
+    } finally {
+      if (!(eventOrFile instanceof File) && eventOrFile?.target) eventOrFile.target.value = '';
+    }
+  }
+
+  updateMediaReadiness(successMessage = '') {
+    const project = this.pendingProject || {};
+    const hasImage = Boolean(project.imageBlob && project.imageDimensions);
+    const hasVideo = Boolean(project.videoBlob && project.videoMetadata);
+    const publish = document.getElementById('btn-publish');
+    const label = document.getElementById('media-ready-label');
+    if (hasImage && hasVideo) {
+      try {
+        this.videoProcessor.validateAspect(project.imageDimensions, project.videoMetadata);
+        publish.disabled = false;
+        label.textContent = 'Imagen y video alineados · listos para AR';
+        this.setBuildState('ready', successMessage || 'Imagen y video listos para crear la obra aumentada.', 100);
+      } catch (error) {
+        publish.disabled = true;
+        label.textContent = 'Las proporciones no coinciden';
+        this.setBuildState('error', error.message, 0);
+      }
+      return;
+    }
+    publish.disabled = true;
+    label.textContent = hasImage ? 'Imagen lista · falta el video' : hasVideo ? 'Video listo · falta la imagen' : 'Esperando imagen y video';
+    this.setBuildState('processing', hasImage ? 'Ahora subí el video loop.' : hasVideo ? 'Ahora subí la imagen original.' : 'Esperando imagen y video.', 50);
+  }
+
+  async copyLoopPrompt() {
+    const prompt = 'Anima esta imagen en un loop continuo de 5 segundos. Mantén exactamente el encuadre, la composición, los colores y la posición de todos los elementos. Cámara completamente fija, sin zoom, paneo ni rotación. Anima únicamente elementos internos con movimientos sutiles. El primer y último fotograma deben coincidir.';
+    await navigator.clipboard.writeText(prompt);
+    const button = document.getElementById('btn-copy-prompt');
+    button.textContent = 'Prompt copiado';
+    window.setTimeout(() => { button.textContent = 'Copiar prompt para generar el loop'; }, 1800);
+  }
+
   async publishStory(event) {
     event?.preventDefault();
-    if (!this.pendingProject) return;
+    if (!this.pendingProject?.imageBlob || !this.pendingProject?.videoBlob) return;
     this.clearRetry();
     const button = document.getElementById('btn-publish');
     const form = document.getElementById('publish-form');
@@ -180,16 +247,8 @@ class InkMotionApp {
       const compiled = await new MindARManager().compileTarget(sheet.imageUrl);
       this.setBuildState('publishing', 'Preparando PDF de impresión…', 75);
       const pdfBlob = await this.sheetGenerator.createPdf(sheet.jpegDataUrl, sheet.pageSizeMm);
-      const config = { depthStrength: 0.08, animation: 'magic-breathe', loopSeconds: 5, anchor: 'mindar', contentRect: sheet.contentRect, sheetDpi: sheet.dpi };
-      const project = await this.store.saveProject({ id: projectId, title, imageBlob: this.pendingProject.imageBlob, targetBlob: compiled.blob, config });
-      this.setBuildState('publishing', 'Generando relieve 3D con inteligencia artificial…', 88);
-      try {
-        await this.store.generateDepth(project.id);
-      } catch (depthError) {
-        // Depth generation is an enhancement. Publishing remains usable with the
-        // deterministic luminance fallback if the external model is unavailable.
-        console.warn('[InkMotion/Depth] Se usará el relieve local de contingencia.', depthError);
-      }
+      const config = { animation: 'video-loop-lift', loopSeconds: this.pendingProject.videoMetadata.duration, anchor: 'mindar', contentRect: sheet.contentRect, sheetDpi: sheet.dpi };
+      await this.store.saveProject({ id: projectId, title, imageBlob: this.pendingProject.imageBlob, videoBlob: this.pendingProject.videoBlob, targetBlob: compiled.blob, config });
       this.masterSheetPdfUrl = URL.createObjectURL(pdfBlob);
       document.getElementById('public-link').value = url;
       document.getElementById('btn-open-story').href = url;
@@ -205,6 +264,7 @@ class InkMotionApp {
         code: error?.code,
         status: error?.status || error?.statusCode,
         imageSizeBytes: this.pendingProject?.imageBlob?.size,
+        videoSizeBytes: this.pendingProject?.videoBlob?.size,
         targetSizeBytes: this.pendingProject?.targetBlob?.size,
         online: navigator.onLine,
       }, error);
@@ -316,9 +376,10 @@ class InkMotionApp {
       document.getElementById('btn-info').addEventListener('click', () => document.getElementById('story-info').showModal());
       document.getElementById('btn-close-info').addEventListener('click', () => document.getElementById('story-info').close());
       document.getElementById('btn-camera-mode').addEventListener('click', () => this.toggleReaderMode());
-      this.parallax = new ParallaxEngine({ container: '#ar-overlay', depthStrength: Number(project.config?.depthStrength) || 0.08, contentRect: project.config?.contentRect });
+      if (!project.videoUrl) throw new Error('Esta publicación pertenece a una versión anterior de InkMotion. Volvé a publicarla agregando su video loop.');
+      this.parallax = new ParallaxEngine({ container: '#ar-overlay', contentRect: project.config?.contentRect });
       await this.parallax.init();
-      await this.parallax.setTargetImage(project.imageUrl, project.depthUrl);
+      await this.parallax.setTargetVideo(project.imageUrl, project.videoUrl);
       this.mindAR = new MindARManager({ video: '#video-stream' });
       const ready = await this.mindAR.init();
       if (!ready) throw new Error('No se pudo iniciar la cámara. Revisá sus permisos.');

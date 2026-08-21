@@ -332,3 +332,22 @@ FIN DEL REGISTRO
 - El relieve usa un height field no negativo obtenido de luminancia Rec. 709 y gradientes de luminancia: la tinta oscura permanece en el papel y las zonas claras o de borde se elevan.
 - El color se muestrea sin desplazamiento UV, el sombreado es multiplicativo y acromático, y una máscara perimetral suave evita sangrado de la textura fuera de la ilustración.
 - La banda informativa de la Lámina Maestra reserva ahora su propia altura debajo del marco: título y QR quedan completamente separados de la línea y de los fiduciales inferiores.
+2026-08-20 — Profundidad semántica con IA en producción
+- Se incorporó la Edge Function autenticada `generate-depth`, desplegada en el proyecto Supabase `inkmotion` y protegida por JWT.
+- La función usa una versión fija de Replicate Depth Anything V2, descarga el resultado antes de que expire y lo guarda como `depth.png` dentro de la carpeta de la obra.
+- `REPLICATE_API_TOKEN` quedó configurado como secreto del backend; no forma parte del repositorio ni del JavaScript público.
+- `ProjectStore` solicita la generación después de publicar y registra `depthPath`, `depthModel` y `depthStatus` dentro de la configuración de la obra.
+- `ParallaxEngine` carga el mapa IA sin espacio de color, lo usa para desplazar la geometría y mantiene la luminancia local como fallback si el servicio externo falla.
+- La integración conserva la publicación aunque Replicate no responda, evitando que una dependencia externa arruine la demo.
+- El cambio fue fusionado mediante el PR #1, commit productivo `b59c0bdf19bff846604806e46a8faf73314b2a78`, con despliegue Vercel verificado correctamente.
+- Se verificó en producción que `app.js` contiene la nueva integración y que la Edge Function rechaza solicitudes sin cabecera de autorización.
+2026-08-20 — InkMotion Video AR: flujo único imagen + video
+
+- Se reemplazó el flujo de relieve 2.5D por una única experiencia de imagen más video loop.
+- El autor debe cargar una imagen y un MP4 de 3 a 8 segundos, hasta 15 MB y con la misma proporción.
+- Se retiró la invocación a Replicate del proceso de publicación, eliminando su coste y espera del flujo activo.
+- Supabase incorpora `video_path`, permite `animation.mp4` dentro de la carpeta protegida del autor y amplía el bucket a 15 MB.
+- El visor usa `THREE.VideoTexture`: reproduce al encontrar el target, pausa al perderlo y mantiene el video anclado mediante MindAR.
+- La activación añade un despegue sutil con elevación Z, escala aproximada del 2,8 %, sombra y fundido perimetral.
+- Se añadió un mini tutorial de tres pasos y un prompt copiable para generar loops con cámara fija.
+- Las publicaciones del esquema anterior se conservan, pero el visor solicita republicarlas con su video loop.
