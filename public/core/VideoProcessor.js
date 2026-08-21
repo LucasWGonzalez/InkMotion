@@ -30,7 +30,7 @@ class VideoProcessor {
         video.src = url;
       });
       if (!Number.isFinite(metadata.duration) || metadata.duration < this.minDuration || metadata.duration > this.maxDuration + 0.05) {
-        throw new Error('El video debe durar entre 3 y 10 segundos. Recomendamos 8 segundos para mayor compatibilidad con Veo.');
+        throw new Error('El video debe durar entre 3 y 10 segundos. Recomendamos un loop breve para mayor compatibilidad entre generadores.');
       }
       if (!metadata.width || !metadata.height || Math.max(metadata.width, metadata.height) > this.maxDimension) {
         throw new Error('El video debe tener una resolución máxima de 1920 píxeles por lado.');

@@ -9,7 +9,7 @@ class ImageProcessor {
       maxWidth: 1920,
       maxHeight: 1920,
       targetQuality: 0.82,
-      supportedFormats: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
+      supportedFormats: ['image/jpeg', 'image/png', 'image/webp'],
       ...config,
     };
     this.processedImages = new Map();
@@ -17,7 +17,7 @@ class ImageProcessor {
 
   validateFile(file) {
     const errors = [];
-    if (!file || !file.type.startsWith('image/')) errors.push('Seleccioná un archivo de imagen válido.');
+    if (!file || !this.config.supportedFormats.includes(file.type)) errors.push('Seleccioná una imagen JPG, PNG o WebP válida.');
     if (file && file.size > this.config.maxFileSize) {
       errors.push(`La imagen pesa ${(file.size / 1024 / 1024).toFixed(2)} MB. El máximo es ${Math.round(this.config.maxFileSize / 1024 / 1024)} MB.`);
     }

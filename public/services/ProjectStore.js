@@ -115,7 +115,7 @@ class ProjectStore {
     } catch (error) { throw normalizeNetworkError(error); }
   }
 
-  async saveProject({ id: reservedId, title, imageBlob, videoBlob, targetBlob, config }) {
+  async saveProject({ id: reservedId, title, imageBlob, videoBlob, targetBlob, config, onStage = () => {} }) {
     const session = await this.requireActiveSession();
     const validateBlob = (label, blob, expectedType) => {
       if (!(blob instanceof Blob) || blob.size <= 0) {
@@ -163,15 +163,19 @@ class ProjectStore {
       }
     };
     try {
+      onStage({ message: 'Subiendo imagen optimizada…', progress: 68 });
       await upload(imagePath, imageFile, 'image/jpeg');
+      onStage({ message: 'Imagen lista · subiendo video AR…', progress: 76 });
       await upload(videoPath, videoFile, 'video/mp4');
+      onStage({ message: 'Video listo · subiendo marcador AR…', progress: 92 });
       await upload(targetPath, targetFile, 'application/octet-stream');
+      onStage({ message: 'Archivos listos · registrando la publicación…', progress: 97 });
       let data;
       try {
         const response = await this.client.from('stories').insert({
           id,
           author_id: session.user.id,
-          title: title || 'Cuento sin título',
+          title: title || 'Obra sin título',
           image_path: imagePath,
           video_path: videoPath,
           target_path: targetPath,

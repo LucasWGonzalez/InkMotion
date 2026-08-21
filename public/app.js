@@ -9,6 +9,17 @@ import VideoProcessor from './core/VideoProcessor.js';
 const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
 const OAUTH_DRAFT_DB = 'inkmotion-oauth-draft';
 
+function formatBytes(bytes = 0) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+  return bytes >= 1024 * 1024
+    ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    : `${Math.round(bytes / 1024)} KB`;
+}
+
+function formatDuration(seconds = 0) {
+  return Number.isFinite(seconds) ? `${seconds.toFixed(1)} s` : '—';
+}
+
 function compactProjectId(uuid) {
   const bytes = uuid.replaceAll('-', '').match(/.{2}/g).map((pair) => String.fromCharCode(parseInt(pair, 16))).join('');
   return btoa(bytes).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
@@ -53,6 +64,8 @@ class InkMotionApp {
     this.pendingProject = null;
     this.lastSelectedFile = null;
     this.retryAction = null;
+    this.isPublishing = false;
+    this.publicationProgress = 0;
     this.bindTrackingEvents();
     this.start();
   }
@@ -134,7 +147,11 @@ class InkMotionApp {
       const videoUrl = draft.videoBlob ? URL.createObjectURL(draft.videoBlob) : null;
       this.pendingProject = { id: draft.id, imageBlob: draft.imageBlob, imageUrl, imageDimensions: draft.imageDimensions, videoBlob: draft.videoBlob, videoUrl, videoMetadata: draft.videoMetadata };
       document.getElementById('story-title').value = draft.title || '';
-      if (imageUrl) document.getElementById('author-preview').src = imageUrl;
+      if (imageUrl) {
+        const preview = document.getElementById('author-preview');
+        preview.src = imageUrl;
+        preview.hidden = false;
+      }
       if (videoUrl) {
         const preview = document.getElementById('author-video-preview');
         preview.src = videoUrl;
@@ -142,6 +159,7 @@ class InkMotionApp {
         preview.play().catch(() => {});
       }
       document.getElementById('preview-wrap').hidden = false;
+      this.updateMediaMetadata();
       this.updateMediaReadiness('Proyecto recuperado después de iniciar sesión.');
     } catch (error) { console.warn('No se pudo recuperar el proyecto temporal de OAuth.', error); }
   }
@@ -156,16 +174,23 @@ class InkMotionApp {
     this.setBuildState('processing', 'Optimizando la ilustración…', 15);
     try {
       const processed = await this.processor.processImageFile(file, `story-${Date.now()}`);
-      document.getElementById('author-preview').src = processed.url;
+      const preview = document.getElementById('author-preview');
+      preview.src = processed.url;
+      preview.hidden = false;
       document.getElementById('preview-wrap').hidden = false;
-      this.pendingProject = { ...(this.pendingProject || {}), imageBlob: processed.blob, imageUrl: processed.url, imageDimensions: processed.dimensions };
+      this.pendingProject = { ...(this.pendingProject || {}), imageBlob: processed.blob, imageUrl: processed.url, imageDimensions: processed.dimensions, imageName: file.name };
+      this.updateMediaMetadata();
       this.updateMediaReadiness();
     } catch (error) {
       if (this.pendingProject) {
         delete this.pendingProject.imageBlob;
         delete this.pendingProject.imageUrl;
         delete this.pendingProject.imageDimensions;
+        delete this.pendingProject.imageName;
       }
+      document.getElementById('author-preview').removeAttribute('src');
+      document.getElementById('author-preview').hidden = true;
+      this.updateMediaMetadata();
       const message = this.errorMessage(error, 'No se pudo procesar esta ilustración.');
       this.setBuildState('error', message, 0);
       if (this.isNetworkError(error)) this.offerRetry('prepare');
@@ -182,12 +207,13 @@ class InkMotionApp {
     this.setBuildState('processing', 'Verificando duración, peso y proporción del video…', 35);
     try {
       const inspected = await this.videoProcessor.inspect(file);
-      this.pendingProject = { ...(this.pendingProject || {}), videoBlob: inspected.blob, videoUrl: inspected.url, videoMetadata: { duration: inspected.duration, width: inspected.width, height: inspected.height } };
+      this.pendingProject = { ...(this.pendingProject || {}), videoBlob: inspected.blob, videoUrl: inspected.url, videoMetadata: { duration: inspected.duration, width: inspected.width, height: inspected.height }, videoName: file.name };
       const preview = document.getElementById('author-video-preview');
       preview.src = inspected.url;
       preview.hidden = false;
       document.getElementById('preview-wrap').hidden = false;
       preview.play().catch(() => {});
+      this.updateMediaMetadata();
       this.updateMediaReadiness();
     } catch (error) {
       this.setBuildState('error', this.errorMessage(error, 'No se pudo preparar el video.'), 0);
@@ -206,10 +232,12 @@ class InkMotionApp {
       try {
         this.videoProcessor.validateAspect(project.imageDimensions, project.videoMetadata);
         publish.disabled = false;
+        document.getElementById('video-validation').textContent = 'Listo';
         label.textContent = 'Imagen y video alineados · listos para AR';
         this.setBuildState('ready', successMessage || 'Imagen y video listos para crear la obra aumentada.', 100);
       } catch (error) {
         publish.disabled = true;
+        document.getElementById('video-validation').textContent = 'Revisar';
         label.textContent = 'Las proporciones no coinciden';
         this.setBuildState('error', error.message, 0);
       }
@@ -220,20 +248,59 @@ class InkMotionApp {
     this.setBuildState('processing', hasImage ? 'Ahora subí el video loop.' : hasVideo ? 'Ahora subí la imagen original.' : 'Esperando imagen y video.', 50);
   }
 
+  updateMediaMetadata() {
+    const project = this.pendingProject || {};
+    const imageMetadata = document.getElementById('image-metadata');
+    const videoMetadata = document.getElementById('video-metadata');
+    const imageValidation = document.getElementById('image-validation');
+    const videoValidation = document.getElementById('video-validation');
+    if (project.imageBlob && project.imageDimensions) {
+      imageMetadata.textContent = `${project.imageName || 'Imagen recuperada'} · ${project.imageDimensions.width} × ${project.imageDimensions.height} px · ${formatBytes(project.imageBlob.size)}`;
+      imageValidation.textContent = 'Lista';
+    } else {
+      imageMetadata.textContent = 'Seleccioná una imagen';
+      imageValidation.textContent = 'Pendiente';
+    }
+    if (project.videoBlob && project.videoMetadata) {
+      videoMetadata.textContent = `${project.videoName || 'Video recuperado'} · ${project.videoMetadata.width} × ${project.videoMetadata.height} px · ${formatDuration(project.videoMetadata.duration)} · ${formatBytes(project.videoBlob.size)}`;
+      videoValidation.textContent = 'Listo';
+    } else {
+      videoMetadata.textContent = 'Seleccioná un video';
+      videoValidation.textContent = 'Pendiente';
+    }
+  }
+
   async copyLoopPrompt() {
-    const prompt = `Use the uploaded image as the strict and exclusive visual reference for the entire video. Create a subtle seamless loop while preserving the source image exactly.
+    const prompt = `Use the uploaded image as the strict and exclusive visual reference for the entire video.
 
-LOCKED CAMERA AND COMPOSITION: keep the camera completely static. Preserve the exact framing, crop, aspect ratio, perspective, horizon, scale, colors, lighting, background and position of every existing element from the source image.
+REFERENCE FIDELITY
+Preserve the original image's composition, framing, aspect ratio, perspective, color palette, lighting, artistic style, textures, linework, background and all existing details. The first frame must match the uploaded image. Keep all non-animated regions visually unchanged and stable throughout the video.
 
-ANIMATION: animate only small internal details that are already visible in the image, using subtle, natural and cyclical motion. Keep the principal subject and all structural shapes in their original positions. The motion must return smoothly to its starting state, with the final frame visually matching the first frame.
+LOCKED CAMERA
+Use a completely static tripod shot. Absolute zero camera movement: no zoom, pan, tilt, roll, shift, dolly, orbit, reframing, perspective change, parallax or simulated depth movement. Do not crop, stretch, rotate or change the aspect ratio.
 
-STRICT RESTRICTIONS: do not zoom, pan, tilt, rotate, dolly, orbit, reframe or move the camera. Do not crop, stretch or change the aspect ratio. Do not add, remove, replace, redesign or hallucinate objects, characters, textures, limbs, facial features, text or background elements. Do not change the art style, palette, anatomy, proportions, geometry or scene layout. No cuts, transitions, scene changes, morphing, flicker or sudden movement. No subtitles, logos or new text.
+SUBTLE LOCALIZED ANIMATION
+Create only subtle, natural and cyclical micro-movements in a small number of elements already visible in the source image. Automatically choose movements appropriate to the existing content.
 
-OUTPUT: one continuous 8-second MP4 shot, fixed camera, seamless loop, faithful to the uploaded image. No audio.`;
+Keep the main subject's position, silhouette, proportions, anatomy, geometry, structural lines and contact points locked in place. Keep the background fixed. Motion must remain localized and must not cause the rest of the image to drift, warp or move.
+
+SEAMLESS LOOP
+Create one continuous shot that returns smoothly to its initial visual state. The final frame must match the first frame as closely as possible, with every animated element returning to its original position, shape, scale, color and lighting state. No visible jump at the loop point.
+
+STRICT RESTRICTIONS
+Do not add, remove, replace or redesign any object, character, body part, facial feature, texture, shadow, reflection or background element.
+Do not morph, deform, melt, stretch, duplicate or reshape anything.
+Do not change anatomy, proportions, geometry, line art, palette, art style or scene layout.
+Do not introduce new camera angles, foreground elements or background expansion.
+Preserve all existing text, logos and symbols exactly; do not alter them or generate new text.
+No cuts, transitions, scene changes, flicker, flashing, sudden movement, frame instability or temporal artifacts.
+
+OUTPUT
+One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded image and suitable for a seamless AR loop.`;
     await navigator.clipboard.writeText(prompt);
     const button = document.getElementById('btn-copy-prompt');
     button.textContent = 'Prompt copiado';
-    window.setTimeout(() => { button.textContent = 'Copiar prompt restrictivo para Veo'; }, 1800);
+    window.setTimeout(() => { button.textContent = 'Copiar prompt universal'; }, 1800);
   }
 
   async publishStory(event) {
@@ -244,19 +311,30 @@ OUTPUT: one continuous 8-second MP4 shot, fixed camera, seamless loop, faithful 
     const form = document.getElementById('publish-form');
     const title = new FormData(form).get('title')?.toString().trim() || 'Obra sin título';
     button.disabled = true;
-    this.setBuildState('publishing', 'Publicando la obra y su experiencia AR…', 100);
+    this.isPublishing = true;
+    this.publicationProgress = 0;
+    this.setBuildState('publishing', 'Validando los archivos de la obra…', 5);
     try {
       const projectId = this.pendingProject.id || crypto.randomUUID();
       this.pendingProject.id = projectId;
       const url = `${window.location.origin}/v/${compactProjectId(projectId)}`;
-      this.setBuildState('publishing', 'Componiendo lámina maestra a 300 DPI…', 20);
+      this.setBuildState('publishing', 'Componiendo lámina maestra a 300 DPI…', 12);
       const sheet = await this.sheetGenerator.compose({ illustrationUrl: this.pendingProject.imageUrl, publicUrl: url, title });
-      this.setBuildState('publishing', 'Compilando la lámina completa como marcador AR…', 45);
+      this.setBuildState('publishing', 'Lámina compuesta · compilando el marcador AR…', 25);
       const compiled = await new MindARManager().compileTarget(sheet.imageUrl);
-      this.setBuildState('publishing', 'Preparando PDF de impresión…', 75);
+      this.setBuildState('publishing', 'Marcador AR validado · preparando el PDF…', 58);
       const pdfBlob = await this.sheetGenerator.createPdf(sheet.jpegDataUrl, sheet.pageSizeMm);
       const config = { animation: 'video-loop-lift', loopSeconds: this.pendingProject.videoMetadata.duration, anchor: 'mindar', contentRect: sheet.contentRect, sheetDpi: sheet.dpi };
-      await this.store.saveProject({ id: projectId, title, imageBlob: this.pendingProject.imageBlob, videoBlob: this.pendingProject.videoBlob, targetBlob: compiled.blob, config });
+      this.setBuildState('publishing', 'PDF listo · iniciando la publicación…', 65);
+      await this.store.saveProject({
+        id: projectId,
+        title,
+        imageBlob: this.pendingProject.imageBlob,
+        videoBlob: this.pendingProject.videoBlob,
+        targetBlob: compiled.blob,
+        config,
+        onStage: ({ message, progress }) => this.setBuildState('publishing', message, progress),
+      });
       this.masterSheetPdfUrl = URL.createObjectURL(pdfBlob);
       document.getElementById('public-link').value = url;
       document.getElementById('btn-open-story').href = url;
@@ -264,6 +342,7 @@ OUTPUT: one continuous 8-second MP4 shot, fixed camera, seamless loop, faithful 
       await this.prepareSheetResult(sheet.canvas);
       document.getElementById('publish-result').hidden = false;
       this.setBuildState('published', 'Obra publicada correctamente.', 100);
+      this.isPublishing = false;
     } catch (error) {
       console.error('[InkMotion] No se pudo publicar el proyecto', {
         message: error?.message,
@@ -278,6 +357,7 @@ OUTPUT: one continuous 8-second MP4 shot, fixed camera, seamless loop, faithful 
       }, error);
       const message = this.errorMessage(error, 'No se pudo publicar. Intentá nuevamente.');
       this.setBuildState('error', message, 0);
+      this.isPublishing = false;
       if (this.isNetworkError(error)) this.offerRetry('publish');
       button.disabled = false;
       if (error?.code === 'AUTH_SESSION_EXPIRED') {
@@ -366,9 +446,14 @@ OUTPUT: one continuous 8-second MP4 shot, fixed camera, seamless loop, faithful 
   setBuildState(state, message, progress) {
     const box = document.getElementById('build-status');
     if (!box) return;
+    const safeProgress = Math.max(0, Math.min(100, Number(progress) || 0));
+    const displayProgress = this.isPublishing && ['publishing', 'processing'].includes(state)
+      ? Math.max(this.publicationProgress, safeProgress)
+      : safeProgress;
+    if (this.isPublishing && ['publishing', 'processing'].includes(state)) this.publicationProgress = displayProgress;
     box.dataset.state = state;
     document.getElementById('build-label').textContent = message;
-    document.getElementById('build-progress').style.width = `${progress}%`;
+    document.getElementById('build-progress').style.width = `${displayProgress}%`;
   }
 
   async startReader(id) {
@@ -411,11 +496,34 @@ OUTPUT: one continuous 8-second MP4 shot, fixed camera, seamless loop, faithful 
       console.error('[InkMotion/Global] Promise rechazada sin controlar', event.reason);
     });
     EventBus.on('mindar:engine-state', ({ state, attempt, total }) => {
+      if (this.isPublishing) {
+        const message = state === 'ready'
+          ? 'Motor AR conectado · analizando la lámina…'
+          : state === 'retrying'
+          ? `Conectando con el motor AR · alternativa ${attempt} de ${total}…`
+          : 'Conectando con el motor AR…';
+        this.setBuildState('publishing', message, 25);
+        return;
+      }
       if (state === 'ready') this.setBuildState('processing', 'Motor AR conectado · analizando imagen…', 20);
       else if (state === 'retrying') this.setBuildState('processing', `Conectando con el motor AR · alternativa ${attempt} de ${total}…`, 10);
       else this.setBuildState('processing', 'Conectando con el motor AR…', 8);
     });
-    EventBus.on('mindar:compilation-progress', ({ progress }) => this.setBuildState('processing', `Compilando marcador AR · ${Math.min(100, progress)}%`, Math.min(100, progress)));
+    EventBus.on('mindar:compilation-progress', ({ progress }) => {
+      const normalized = Math.min(100, progress);
+      if (this.isPublishing) {
+        this.setBuildState('publishing', `Compilando marcador AR · ${normalized}%`, 25 + normalized * 0.3);
+      } else {
+        this.setBuildState('processing', `Compilando marcador AR · ${normalized}%`, normalized);
+      }
+    });
+    EventBus.on('mindar:target-quality', ({ quality }) => {
+      if (!this.isPublishing) return;
+      const message = quality === 'good'
+        ? 'Tracking fuerte · preparando archivos finales…'
+        : 'Tracking aceptable · usá buena luz al escanear.';
+      this.setBuildState('publishing', message, 56);
+    });
     EventBus.on('mindar:target-found', () => {
       window.clearTimeout(this.readerLostTimer);
       this.readerLostTimer = null;
