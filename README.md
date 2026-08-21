@@ -12,7 +12,7 @@ InkMotion convierte una imagen y su animación breve en una obra física aumenta
 
 La imagen y el video deben conservar la misma proporción y encuadre. Se recomienda un loop breve, sin movimiento de cámara y con cambios internos sutiles. Para obtener mayor compatibilidad entre generadores, conviene preparar la imagen en 16:9 o 9:16 antes de animarla, porque algunas herramientas pueden recortar o reencuadrar otras proporciones.
 
-InkMotion incluye un prompt universal copiable para herramientas de imagen a video. Si el generador permite elegir fotograma inicial y final, se recomienda usar la misma imagen en ambos para conseguir un loop más estable.
+La guía de autor aclara que la imagen y el video se preparan fuera de InkMotion. Como ayuda opcional, ofrece instrucciones copiables para pegar junto con la imagen en cualquier herramienta de IA de imagen a video. Si el generador permite elegir fotograma inicial y final, se recomienda usar la misma imagen en ambos para conseguir un loop más estable.
 
 ## Experiencia del lector
 

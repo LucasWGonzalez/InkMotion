@@ -302,8 +302,8 @@ OUTPUT
 One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded image and suitable for a seamless AR loop.`;
     await navigator.clipboard.writeText(prompt);
     const button = document.getElementById('btn-copy-prompt');
-    button.textContent = 'Prompt copiado';
-    window.setTimeout(() => { button.textContent = 'Copiar prompt universal'; }, 1800);
+    button.textContent = 'Instrucciones copiadas';
+    window.setTimeout(() => { button.textContent = 'Copiar instrucciones para crear el video loop'; }, 1800);
   }
 
   async publishStory(event) {

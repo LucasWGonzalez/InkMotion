@@ -374,3 +374,8 @@ FIN DEL REGISTRO
 - La captura se procesa localmente, no se almacena en Supabase y ofrece descarga o uso de Web Share cuando el navegador lo permite.
 - Un control independiente activa o silencia la pista de audio del MP4 mediante una interacción explícita, evitando bloqueos de autoplay.
 - La grabación selecciona automáticamente MP4 o WebM según las capacidades del dispositivo y se oculta sin afectar el AR cuando MediaRecorder no está disponible.
+2026-08-21 — Tutorial con responsabilidades claras
+
+- La guía distingue la preparación externa de la imagen y el video de las funciones realizadas automáticamente por InkMotion.
+- “Prompt universal” se reemplaza por “instrucciones para crear el video loop” y se explica dónde pegarlas y para qué sirven.
+- El tercer paso detalla el valor propio de InkMotion: validar los archivos y generar lámina, QR y experiencia AR.
