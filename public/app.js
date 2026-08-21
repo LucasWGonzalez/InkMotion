@@ -574,8 +574,19 @@ One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded 
   async shareExperienceRecording() {
     const file = this.recordingFile();
     if (!file) return;
-    try { await navigator.share({ files: [file], title: 'Mi experiencia InkMotion' }); }
-    catch (error) { if (error?.name !== 'AbortError') this.downloadExperienceRecording(); }
+
+    if (!navigator.share || !navigator.canShare?.({ files: [file] })) {
+      this.setReaderStatus('Este dispositivo no permite compartir este formato de video.', 'warning');
+      return;
+    }
+
+    try {
+      await navigator.share({ files: [file], title: 'Mi experiencia InkMotion' });
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      console.warn('[InkMotion/Share] El dispositivo rechazó compartir el video.', error);
+      this.setReaderStatus('No se pudo abrir el menú para compartir. El video no fue descargado.', 'warning');
+    }
   }
 
   closeExperienceRecording(closeDialog = true) {
