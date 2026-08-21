@@ -36,6 +36,7 @@ class ParallaxEngine {
     this.revealTarget = 0;
     this.lastFrameTime = performance.now();
     this.boundResize = this.handleResize.bind(this);
+    this.frameListeners = new Set();
   }
 
   async init() {
@@ -359,9 +360,20 @@ class ParallaxEngine {
         this.updateParticles(loopPhase);
       }
       this.renderer.render(this.scene, this.camera);
+      this.frameListeners.forEach((listener) => listener());
       this.animationFrame = requestAnimationFrame(render);
     };
     this.animationFrame = requestAnimationFrame(render);
+  }
+
+  addFrameListener(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this.frameListeners.add(listener);
+    return () => this.frameListeners.delete(listener);
+  }
+
+  getCaptureSources() {
+    return { arCanvas: this.renderer?.domElement || null, animatedVideo: this.videoElement || null };
   }
 
   handleResize() {
@@ -419,6 +431,7 @@ class ParallaxEngine {
     window.removeEventListener('resize', this.boundResize);
     this.disposeTarget();
     this.renderer?.dispose();
+    this.frameListeners.clear();
   }
 }
 

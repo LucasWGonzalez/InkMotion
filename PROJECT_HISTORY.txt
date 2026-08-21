@@ -368,3 +368,9 @@ FIN DEL REGISTRO
 - La barra de publicación avanza de forma monotónica por composición, compilación, PDF, subidas y registro final.
 - La calidad calculada por MindAR se comunica como tracking fuerte o aceptable durante la generación.
 - Se retiró HEIC de los formatos anunciados hasta contar con conversión compatible entre navegadores, y se aclara que el audio del MP4 no se reproduce.
+2026-08-21 — Grabación local y sonido opcional
+
+- El lector incorpora un botón rojo opcional que graba cámara y Canvas AR únicamente después de ser pulsado y continúa hasta que la persona lo detiene.
+- La captura se procesa localmente, no se almacena en Supabase y ofrece descarga o uso de Web Share cuando el navegador lo permite.
+- Un control independiente activa o silencia la pista de audio del MP4 mediante una interacción explícita, evitando bloqueos de autoplay.
+- La grabación selecciona automáticamente MP4 o WebM según las capacidades del dispositivo y se oculta sin afectar el AR cuando MediaRecorder no está disponible.
