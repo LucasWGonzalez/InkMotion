@@ -17,6 +17,7 @@ class ParallaxEngine {
     this.particles = null;
     this.particleBase = null;
     this.videoElement = null;
+    this.videoUnlockHandler = null;
     this.videoTexture = null;
     this.storyMaterial = null;
     this.animationFrame = null;
@@ -138,17 +139,85 @@ class ParallaxEngine {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
+      video.defaultMuted = true;
       video.muted = true;
       video.loop = true;
       video.playsInline = true;
+      video.autoplay = true;
       video.preload = 'auto';
+      video.controls = false;
+      video.disablePictureInPicture = true;
       video.setAttribute('playsinline', '');
       video.setAttribute('webkit-playsinline', '');
-      video.onloadedmetadata = () => resolve(video);
-      video.onerror = () => reject(new Error('No se pudo cargar la animación MP4 de esta obra.'));
+      video.setAttribute('muted', '');
+      video.setAttribute('aria-hidden', 'true');
+      Object.assign(video.style, {
+        position: 'fixed',
+        width: '1px',
+        height: '1px',
+        left: '-2px',
+        bottom: '0',
+        opacity: '0.001',
+        pointerEvents: 'none',
+      });
+      this.videoElement = video;
+      this.installVideoUnlock();
+
+      let settled = false;
+      const timeout = window.setTimeout(() => fail(), 15000);
+      const finish = () => {
+        if (settled || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        resolve(video);
+      };
+      const fail = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        video.remove();
+        reject(new Error('El iPhone no pudo decodificar este MP4. Exportalo como H.264, audio AAC y color SDR.'));
+      };
+      video.addEventListener('loadeddata', finish, { once: true });
+      video.addEventListener('canplay', finish, { once: true });
+      video.addEventListener('error', fail, { once: true });
+      video.addEventListener('loadedmetadata', () => {
+        // WebKit puede no entregar el primer fotograma hasta iniciar una reproducción silenciosa.
+        video.play().then(finish).catch(() => {});
+      }, { once: true });
       video.src = url;
+      document.body.appendChild(video);
       video.load();
     });
+  }
+
+  installVideoUnlock() {
+    this.removeVideoUnlock();
+    this.videoUnlockHandler = () => this.ensureVideoPlayback(true);
+    document.addEventListener('pointerdown', this.videoUnlockHandler, { passive: true, once: true });
+    document.addEventListener('touchend', this.videoUnlockHandler, { passive: true, once: true });
+    this.ensureVideoPlayback(false);
+  }
+
+  removeVideoUnlock() {
+    if (!this.videoUnlockHandler) return;
+    document.removeEventListener('pointerdown', this.videoUnlockHandler);
+    document.removeEventListener('touchend', this.videoUnlockHandler);
+    this.videoUnlockHandler = null;
+  }
+
+  async ensureVideoPlayback(fromUserGesture = false) {
+    if (!this.videoElement) return false;
+    try {
+      await this.videoElement.play();
+      if (this.videoTexture) this.videoTexture.needsUpdate = true;
+      this.removeVideoUnlock();
+      return true;
+    } catch (error) {
+      console.warn('[InkMotion/Video] WebKit bloqueó temporalmente la reproducción.', error);
+      if (fromUserGesture) EventBus.emit('parallax:video-error', error);
+      return false;
+    }
   }
 
   createVideoMaterial(texture) {
@@ -237,7 +306,7 @@ class ParallaxEngine {
     this.isTargetVisible = true;
     this.revealTarget = 1;
     this.anchorGroup.visible = this.previewMode === '3d' && Boolean(this.videoMesh);
-    this.videoElement?.play().catch((error) => console.warn('[InkMotion/Video] El navegador demoró el autoplay.', error));
+    this.ensureVideoPlayback(false);
     this.container.classList.add('target-found');
   }
 
@@ -416,7 +485,9 @@ class ParallaxEngine {
       this.videoElement.pause();
       this.videoElement.removeAttribute('src');
       this.videoElement.load();
+      this.videoElement.remove();
     }
+    this.removeVideoUnlock();
     this.videoMesh = this.shadowMesh = this.particles = null;
     this.particleBase = null;
     this.videoElement = null;
