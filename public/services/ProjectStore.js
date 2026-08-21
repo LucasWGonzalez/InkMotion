@@ -3,7 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.102.0';
 const SUPABASE_URL = 'https://srcofwiuobmvezkodscg.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_agzhvCuMkzw49BFSyxyAsw_znhUaK1T';
 const BUCKET = 'stories';
-const BUCKET_FILE_LIMIT = 10 * 1024 * 1024;
+const IMAGE_TARGET_LIMIT = 10 * 1024 * 1024;
+const VIDEO_FILE_LIMIT = 15 * 1024 * 1024;
 const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
 
 function errorDetails(error) {
@@ -114,7 +115,7 @@ class ProjectStore {
     } catch (error) { throw normalizeNetworkError(error); }
   }
 
-  async saveProject({ id: reservedId, title, imageBlob, targetBlob, config }) {
+  async saveProject({ id: reservedId, title, imageBlob, videoBlob, targetBlob, config }) {
     const session = await this.requireActiveSession();
     const validateBlob = (label, blob, expectedType) => {
       if (!(blob instanceof Blob) || blob.size <= 0) {
@@ -122,15 +123,17 @@ class ProjectStore {
         error.code = 'INVALID_UPLOAD_BLOB';
         throw error;
       }
-      if (blob.size > BUCKET_FILE_LIMIT) {
+      const fileLimit = expectedType === 'video/mp4' ? VIDEO_FILE_LIMIT : IMAGE_TARGET_LIMIT;
+      if (blob.size > fileLimit) {
         const size = (blob.size / 1024 / 1024).toFixed(2);
-        const error = new Error(`${label} pesa ${size} MB y supera el límite de 10 MB de Supabase Storage.`);
+        const error = new Error(`${label} pesa ${size} MB y supera el límite permitido.`);
         error.code = 'UPLOAD_TOO_LARGE';
         throw error;
       }
       return blob.type === expectedType ? blob : new Blob([blob], { type: expectedType });
     };
     const imageFile = validateBlob('La imagen optimizada', imageBlob, 'image/jpeg');
+    const videoFile = validateBlob('El video loop', videoBlob, 'video/mp4');
     const targetFile = validateBlob('El archivo .mind', targetBlob, 'application/octet-stream');
     const id = reservedId || crypto.randomUUID();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
@@ -138,6 +141,7 @@ class ProjectStore {
     }
     const root = `${session.user.id}/${id}`;
     const imagePath = `${root}/cover.jpg`;
+    const videoPath = `${root}/animation.mp4`;
     const targetPath = `${root}/target.mind`;
     const upload = async (path, blob, contentType) => {
       try {
@@ -148,7 +152,7 @@ class ProjectStore {
         });
         if (error) throw error;
       } catch (error) {
-        logSupabaseError(`la subida de ${path.endsWith('.mind') ? 'target.mind' : 'cover.jpg'}`, error, {
+        logSupabaseError(`la subida de ${path.split('/').pop()}`, error, {
           path,
           contentType,
           sizeBytes: blob.size,
@@ -160,6 +164,7 @@ class ProjectStore {
     };
     try {
       await upload(imagePath, imageFile, 'image/jpeg');
+      await upload(videoPath, videoFile, 'video/mp4');
       await upload(targetPath, targetFile, 'application/octet-stream');
       let data;
       try {
@@ -168,6 +173,7 @@ class ProjectStore {
           author_id: session.user.id,
           title: title || 'Cuento sin título',
           image_path: imagePath,
+          video_path: videoPath,
           target_path: targetPath,
           config,
         }).select('id').single();
@@ -180,7 +186,7 @@ class ProjectStore {
       return data;
     } catch (error) {
       try {
-        await this.client.storage.from(BUCKET).remove([imagePath, targetPath]);
+        await this.client.storage.from(BUCKET).remove([imagePath, videoPath, targetPath]);
       } catch (cleanupError) {
         console.warn('No se pudieron limpiar los archivos de una publicación fallida.', cleanupError);
       }
@@ -189,6 +195,7 @@ class ProjectStore {
         logSupabaseError('la publicación del proyecto', error, {
           storyId: id,
           imageSizeBytes: imageFile.size,
+          videoSizeBytes: videoFile.size,
           targetSizeBytes: targetFile.size,
         });
       }
@@ -196,34 +203,18 @@ class ProjectStore {
     }
   }
 
-  async generateDepth(id) {
-    const session = await this.requireActiveSession();
-    try {
-      const { data, error } = await this.client.functions.invoke('generate-depth', {
-        body: { storyId: id },
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (error) throw error;
-      if (!data?.depthPath) throw new Error('Replicate no devolvió un mapa de profundidad válido.');
-      return data;
-    } catch (error) {
-      logSupabaseError('la generación del mapa de profundidad', error, { storyId: id });
-      throw normalizeNetworkError(error);
-    }
-  }
-
   async getProject(id) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return null;
     try {
-      const { data, error } = await this.client.from('stories').select('id,title,image_path,target_path,config,created_at').eq('id', id).maybeSingle();
+      const { data, error } = await this.client.from('stories').select('id,title,image_path,video_path,target_path,config,created_at').eq('id', id).maybeSingle();
       if (error) throw error;
       if (!data) return null;
       const publicUrl = (path) => this.client.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
       return {
         ...data,
         imageUrl: publicUrl(data.image_path),
+        videoUrl: data.video_path ? publicUrl(data.video_path) : null,
         targetUrl: publicUrl(data.target_path),
-        depthUrl: data.config?.depthPath ? publicUrl(data.config.depthPath) : null,
       };
     } catch (error) { throw normalizeNetworkError(error); }
   }

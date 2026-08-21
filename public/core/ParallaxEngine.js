@@ -5,19 +5,19 @@ const LOOP_DURATION = 5000;
 
 class ParallaxEngine {
   constructor(config = {}) {
-    this.config = { container: '#ar-overlay', depthStrength: 0.12, anchorSmoothing: 0.18, ...config };
+    this.config = { container: '#ar-overlay', anchorSmoothing: 0.18, ...config };
     this.container = null;
     this.scene = null;
     this.camera = null;
     this.renderer = null;
     this.anchorGroup = null;
     this.storyGroup = null;
-    this.imageMesh = null;
-    this.frameMesh = null;
+    this.videoMesh = null;
+    this.shadowMesh = null;
     this.particles = null;
     this.particleBase = null;
-    this.texture = null;
-    this.depthTexture = null;
+    this.videoElement = null;
+    this.videoTexture = null;
     this.storyMaterial = null;
     this.animationFrame = null;
     this.isActive = false;
@@ -86,30 +86,13 @@ class ParallaxEngine {
     });
   }
 
-  async setTargetImage(url, depthUrl = null) {
-    const texture = await this.loadTexture(url, 'No se pudo cargar la textura 3D.');
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
-
+  async setTargetVideo(imageUrl, videoUrl) {
+    const reference = await this.loadTexture(imageUrl, 'No se pudo cargar la imagen de referencia.');
     this.disposeTarget();
-    this.texture = texture;
-    if (depthUrl) {
-      try {
-        this.depthTexture = await this.loadTexture(depthUrl, 'No se pudo cargar el mapa de profundidad IA.');
-        this.depthTexture.colorSpace = THREE.NoColorSpace;
-        this.depthTexture.minFilter = THREE.LinearFilter;
-        this.depthTexture.magFilter = THREE.LinearFilter;
-        this.depthTexture.wrapS = this.depthTexture.wrapT = THREE.ClampToEdgeWrapping;
-      } catch (error) {
-        console.warn('[InkMotion/Depth] Mapa IA no disponible; usando luminancia local.', error);
-        this.depthTexture = null;
-      }
-    }
-    const image = texture.image;
+    const image = reference.image;
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
+    reference.dispose();
     const aspect = THREE.MathUtils.clamp(width / height, 0.2, 5);
     const contentRect = this.config.contentRect;
     const planeWidth = contentRect?.width || 1;
@@ -117,13 +100,23 @@ class ParallaxEngine {
       ? contentRect.height * contentRect.targetAspect
       : 1 / aspect;
 
-    const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight, 80, 60);
-    this.storyMaterial = this.createDepthMaterial(texture, this.depthTexture || texture, Boolean(this.depthTexture));
-    this.imageMesh = new THREE.Mesh(geometry, this.storyMaterial);
-    this.imageMesh.position.z = 0.018;
+    this.videoElement = await this.createVideoElement(videoUrl);
+    const videoAspect = this.videoElement.videoWidth / this.videoElement.videoHeight;
+    if (Math.abs(videoAspect - aspect) / aspect > 0.03) throw new Error('El video publicado no coincide con la proporción de la imagen.');
+    this.videoTexture = new THREE.VideoTexture(this.videoElement);
+    this.videoTexture.colorSpace = THREE.SRGBColorSpace;
+    this.videoTexture.minFilter = THREE.LinearFilter;
+    this.videoTexture.magFilter = THREE.LinearFilter;
+    this.storyMaterial = this.createVideoMaterial(this.videoTexture);
+    this.videoMesh = new THREE.Mesh(new THREE.PlaneGeometry(planeWidth, planeHeight), this.storyMaterial);
+    this.videoMesh.position.z = 0.003;
+    this.videoMesh.renderOrder = 2;
+
+    this.shadowMesh = this.createLiftShadow(planeWidth, planeHeight);
+    this.shadowMesh.position.set(0.012, -0.014, 0.001);
 
     this.particles = this.createMagicParticles({ width: planeWidth, height: planeHeight });
-    this.storyGroup.add(this.imageMesh, this.particles);
+    this.storyGroup.add(this.shadowMesh, this.videoMesh, this.particles);
     const offsetX = contentRect ? contentRect.x + contentRect.width / 2 - 0.5 : 0;
     const offsetY = contentRect
       ? (0.5 - contentRect.y - contentRect.height / 2) * contentRect.targetAspect
@@ -140,94 +133,69 @@ class ParallaxEngine {
     EventBus.emit('parallax:texture-ready', { width, height, anchorMode: 'mindar' });
   }
 
-  createDepthMaterial(texture, depthTexture, hasAiDepth) {
-    const textureWidth = texture.image.naturalWidth || texture.image.width || 1;
-    const textureHeight = texture.image.naturalHeight || texture.image.height || 1;
+  createVideoElement(url) {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      video.onloadedmetadata = () => resolve(video);
+      video.onerror = () => reject(new Error('No se pudo cargar la animación MP4 de esta obra.'));
+      video.src = url;
+      video.load();
+    });
+  }
+
+  createVideoMaterial(texture) {
     return new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       uniforms: {
-        uTexture: { value: texture },
-        uDepthMap: { value: depthTexture },
-        uHasAiDepth: { value: hasAiDepth ? 1 : 0 },
-        uDepthStrength: { value: this.config.depthStrength },
+        uVideo: { value: texture },
         uReveal: { value: 0 },
-        uTexelSize: { value: new THREE.Vector2(1 / textureWidth, 1 / textureHeight) },
       },
       vertexShader: `
-        uniform sampler2D uTexture;
-        uniform sampler2D uDepthMap;
-        uniform float uHasAiDepth;
-        uniform float uDepthStrength;
-        uniform float uReveal;
-        uniform vec2 uTexelSize;
         varying vec2 vUv;
-        varying float vHeight;
-
-        float lumaAt(vec2 coord) {
-          vec3 color = texture2D(uTexture, clamp(coord, vec2(0.0), vec2(1.0))).rgb;
-          return dot(color, vec3(0.2126, 0.7152, 0.0722));
-        }
-
         void main() {
           vUv = uv;
-          float center = lumaAt(uv);
-          float left = lumaAt(uv - vec2(uTexelSize.x, 0.0));
-          float right = lumaAt(uv + vec2(uTexelSize.x, 0.0));
-          float down = lumaAt(uv - vec2(0.0, uTexelSize.y));
-          float up = lumaAt(uv + vec2(0.0, uTexelSize.y));
-          float edge = clamp(length(vec2(right - left, up - down)) * 2.2, 0.0, 1.0);
-
-          // Zero is the paper plane: dark ink remains attached to it. Midtones,
-          // highlights and luminance edges rise without any negative displacement.
-          float luminanceHeight = pow(smoothstep(0.16, 0.88, center), 1.35);
-          float aiHeight = texture2D(uDepthMap, uv).r;
-          aiHeight = pow(smoothstep(0.06, 0.94, aiHeight), 1.12);
-          float fallbackHeight = max(luminanceHeight, edge * 0.42);
-          vHeight = clamp(mix(fallbackHeight, aiHeight, uHasAiDepth), 0.0, 1.0);
-          vec3 displaced = position;
-          displaced.z += vHeight * uDepthStrength * uReveal;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
-        uniform sampler2D uTexture;
+        uniform sampler2D uVideo;
         uniform float uReveal;
-        uniform vec2 uTexelSize;
         varying vec2 vUv;
-        varying float vHeight;
-
-        float lumaAt(vec2 coord) {
-          vec3 color = texture2D(uTexture, clamp(coord, vec2(0.0), vec2(1.0))).rgb;
-          return dot(color, vec3(0.2126, 0.7152, 0.0722));
-        }
-
         void main() {
-          // Sample the original UV exactly once: no chromatic offset or doubled ink.
-          vec4 color = texture2D(uTexture, vUv);
-
-          // Build a neutral pseudo-normal from the same grayscale height field.
-          float left = lumaAt(vUv - vec2(uTexelSize.x, 0.0));
-          float right = lumaAt(vUv + vec2(uTexelSize.x, 0.0));
-          float down = lumaAt(vUv - vec2(0.0, uTexelSize.y));
-          float up = lumaAt(vUv + vec2(0.0, uTexelSize.y));
-          vec3 normal = normalize(vec3((left - right) * 2.4, (down - up) * 2.4, 0.34));
-          float diffuse = clamp(dot(normal, normalize(vec3(-0.32, 0.42, 0.85))), 0.0, 1.0);
-          float neutralLight = mix(0.94, 1.055, diffuse) * mix(0.985, 1.025, vHeight);
-
-          // JPEG has no useful alpha channel. Fade only the perimeter to stop
-          // displaced geometry and ClampToEdge pixels bleeding outside the artwork.
+          vec4 color = texture2D(uVideo, vUv);
           vec2 edgeDistance = min(vUv, vec2(1.0) - vUv);
-          float edgeMask = smoothstep(0.0, 0.018, min(edgeDistance.x, edgeDistance.y));
+          float edgeMask = smoothstep(0.0, 0.014, min(edgeDistance.x, edgeDistance.y));
           float revealAlpha = smoothstep(0.0, 0.14, uReveal);
-          float alpha = color.a * edgeMask * revealAlpha;
-
-          // Multiplicative neutral lighting preserves hue and saturation exactly.
-          gl_FragColor = vec4(color.rgb * neutralLight, alpha);
+          gl_FragColor = vec4(color.rgb, color.a * edgeMask * revealAlpha * 0.96);
         }
       `,
       transparent: true,
       depthWrite: true,
     });
+  }
+
+  createLiftShadow(width, height) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(128, 128, 45, 128, 128, 128);
+    gradient.addColorStop(0, 'rgba(0,0,0,.42)');
+    gradient.addColorStop(0.72, 'rgba(0,0,0,.20)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 256, 256);
+    const material = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0, depthWrite: false });
+    const shadow = new THREE.Mesh(new THREE.PlaneGeometry(width * 1.035, height * 1.035), material);
+    shadow.renderOrder = 1;
+    return shadow;
   }
 
   setProjectionMatrix(matrix) {
@@ -267,13 +235,15 @@ class ParallaxEngine {
   onTargetFound() {
     this.isTargetVisible = true;
     this.revealTarget = 1;
-    this.anchorGroup.visible = this.previewMode === '3d' && Boolean(this.imageMesh);
+    this.anchorGroup.visible = this.previewMode === '3d' && Boolean(this.videoMesh);
+    this.videoElement?.play().catch((error) => console.warn('[InkMotion/Video] El navegador demoró el autoplay.', error));
     this.container.classList.add('target-found');
   }
 
   onTargetLost() {
     this.isTargetVisible = false;
     this.revealTarget = 0;
+    this.videoElement?.pause();
     this.container.classList.remove('target-found');
   }
 
@@ -341,7 +311,7 @@ class ParallaxEngine {
   setPreviewMode(mode) {
     this.previewMode = mode === 'camera' ? 'camera' : '3d';
     if (this.anchorGroup) {
-      this.anchorGroup.visible = this.previewMode === '3d' && this.isTargetVisible && Boolean(this.imageMesh);
+      this.anchorGroup.visible = this.previewMode === '3d' && this.isTargetVisible && Boolean(this.videoMesh);
     }
     this.container.classList.toggle('camera-only', this.previewMode === 'camera');
     EventBus.emit('parallax:mode-changed', { mode: this.previewMode });
@@ -381,8 +351,10 @@ class ParallaxEngine {
       const angle = loopPhase * Math.PI * 2;
       if (this.anchorGroup?.visible) {
         const revealEase = 1 - Math.pow(1 - this.revealProgress, 3);
-        const breathing = 1 + Math.sin(angle) * 0.005;
-        this.storyGroup.scale.setScalar((0.985 + revealEase * 0.015) * breathing);
+        const breathing = 1 + Math.sin(angle) * 0.0015;
+        this.storyGroup.scale.setScalar((0.986 + revealEase * 0.028) * breathing);
+        if (this.videoMesh) this.videoMesh.position.z = THREE.MathUtils.lerp(0.002, 0.022, revealEase);
+        if (this.shadowMesh) this.shadowMesh.material.opacity = 0.22 * revealEase;
         if (this.storyMaterial) this.storyMaterial.uniforms.uReveal.value = revealEase;
         this.updateParticles(loopPhase);
       }
@@ -420,19 +392,23 @@ class ParallaxEngine {
   }
 
   disposeTarget() {
-    for (const object of [this.imageMesh, this.frameMesh, this.particles]) {
+    for (const object of [this.videoMesh, this.shadowMesh, this.particles]) {
       if (!object) continue;
       this.storyGroup?.remove(object);
       object.geometry?.dispose();
-      if (object.material?.map && object !== this.imageMesh) object.material.map.dispose();
+      if (object.material?.map) object.material.map.dispose();
       object.material?.dispose();
     }
-    this.texture?.dispose();
-    this.depthTexture?.dispose();
-    this.imageMesh = this.frameMesh = this.particles = null;
+    this.videoTexture?.dispose();
+    if (this.videoElement) {
+      this.videoElement.pause();
+      this.videoElement.removeAttribute('src');
+      this.videoElement.load();
+    }
+    this.videoMesh = this.shadowMesh = this.particles = null;
     this.particleBase = null;
-    this.texture = null;
-    this.depthTexture = null;
+    this.videoElement = null;
+    this.videoTexture = null;
     this.storyMaterial = null;
   }
 
