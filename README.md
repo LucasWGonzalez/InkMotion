@@ -52,7 +52,12 @@ La generación de profundidad con Replicate fue retirada del flujo activo. El pr
 | Peso máximo | 15 MB |
 | Resolución máxima | 1920 px por lado |
 | Proporción | Debe coincidir con la imagen (tolerancia 2,5 %) |
-| Reproducción | Silenciosa, automática y en loop |
+| Audio | Opcional; el lector decide si lo activa |
+| Reproducción | Automática en loop al detectar la lámina |
+
+## Captura de la experiencia
+
+En navegadores compatibles, el lector puede activar el sonido del MP4 y grabar voluntariamente la cámara con la capa AR mediante el botón rojo. La grabación solo comienza al pulsarlo, continúa hasta que la persona la detiene y permanece en su dispositivo: InkMotion no la sube a Supabase. Al finalizar puede descargarla o compartirla si el sistema admite archivos mediante Web Share.
 
 ## Desarrollo local
 
