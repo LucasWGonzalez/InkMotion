@@ -661,6 +661,9 @@ One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded 
     EventBus.on('mindar:scan-timeout', ({ message }) => this.setReaderStatus(message, 'warning'));
     EventBus.on('mindar:processing-error', (error) => this.setReaderStatus(error?.message || 'El motor AR interrumpió el procesamiento.', 'error'));
     EventBus.on('parallax:webgl-error', (error) => this.setReaderStatus(error?.message || 'WebGL dejó de responder.', 'error'));
+    EventBus.on('parallax:video-error', () => {
+      this.setReaderStatus('Tocá la pantalla para activar el video. Si no aparece, usá un MP4 H.264.', 'warning');
+    });
     EventBus.on('recorder:state', ({ state }) => {
       const button = document.getElementById('btn-record');
       const controls = document.getElementById('capture-controls');
