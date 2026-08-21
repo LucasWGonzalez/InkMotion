@@ -1,5 +1,5 @@
 class VideoProcessor {
-  constructor({ maxFileSize = 15 * 1024 * 1024, minDuration = 3, maxDuration = 8, maxDimension = 1920 } = {}) {
+  constructor({ maxFileSize = 15 * 1024 * 1024, minDuration = 3, maxDuration = 10, maxDimension = 1920 } = {}) {
     this.maxFileSize = maxFileSize;
     this.minDuration = minDuration;
     this.maxDuration = maxDuration;
@@ -30,7 +30,7 @@ class VideoProcessor {
         video.src = url;
       });
       if (!Number.isFinite(metadata.duration) || metadata.duration < this.minDuration || metadata.duration > this.maxDuration + 0.05) {
-        throw new Error('El video debe durar entre 3 y 8 segundos. Recomendamos un loop de 5 segundos.');
+        throw new Error('El video debe durar entre 3 y 10 segundos. Recomendamos 8 segundos para mayor compatibilidad con Veo.');
       }
       if (!metadata.width || !metadata.height || Math.max(metadata.width, metadata.height) > this.maxDimension) {
         throw new Error('El video debe tener una resolución máxima de 1920 píxeles por lado.');
