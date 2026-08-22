@@ -385,3 +385,8 @@ FIN DEL REGISTRO
 - Se intenta la reproducción silenciosa anticipada y se añade un desbloqueo mediante el primer toque para cumplir las restricciones de reproducción de Safari y Chrome en iOS.
 - Los errores de decodificación indican exportar MP4 H.264, audio AAC y color SDR, sin modificar la lógica de tracking de MindAR.
 - El título general pasa de “Libros Vivos” a “Obras que cobran vida” para representar todo tipo de obra visual.
+2026-08-21 — Compartir y descargar como acciones independientes
+
+- El botón Compartir deja de ejecutar una descarga automática cuando Web Share falla o el usuario cancela el menú.
+- El archivo compartido normaliza su MIME a `video/mp4` o `video/webm`, evitando que iOS rechace tipos extendidos con parámetros de códec.
+- El menú nativo recibe solamente el archivo para maximizar compatibilidad y la interfaz informa el error sin sustituir silenciosamente la acción elegida.
