@@ -6,6 +6,7 @@ const BUCKET = 'stories';
 const IMAGE_TARGET_LIMIT = 10 * 1024 * 1024;
 const VIDEO_FILE_LIMIT = 15 * 1024 * 1024;
 const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function errorDetails(error) {
   return {
@@ -208,7 +209,7 @@ class ProjectStore {
   }
 
   async getProject(id) {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return null;
+    if (!UUID_PATTERN.test(id)) return null;
     try {
       const { data, error } = await this.client.from('stories').select('id,title,image_path,video_path,target_path,config,created_at').eq('id', id).maybeSingle();
       if (error) throw error;
@@ -221,6 +222,56 @@ class ProjectStore {
         targetUrl: publicUrl(data.target_path),
       };
     } catch (error) { throw normalizeNetworkError(error); }
+  }
+
+  async listMyProjects() {
+    const session = await this.requireActiveSession();
+    try {
+      const { data, error } = await this.client
+        .from('stories')
+        .select('id,author_id,title,image_path,created_at')
+        .eq('author_id', session.user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const publicUrl = (path) => this.client.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+      return (data || []).map((project) => ({ ...project, imageUrl: publicUrl(project.image_path) }));
+    } catch (error) {
+      logSupabaseError('la carga de Mis trabajos', error, { authorId: session.user.id });
+      throw normalizeNetworkError(error);
+    }
+  }
+
+  async deleteProject(projectId) {
+    if (!UUID_PATTERN.test(projectId)) throw new Error('El trabajo seleccionado no es válido.');
+    const session = await this.requireActiveSession();
+    try {
+      const { data: project, error: readError } = await this.client
+        .from('stories')
+        .select('id,author_id,image_path,video_path,target_path')
+        .eq('id', projectId)
+        .eq('author_id', session.user.id)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (!project) throw new Error('El trabajo no existe o no pertenece a tu cuenta.');
+
+      const paths = [project.image_path, project.video_path, project.target_path].filter(Boolean);
+      const { error: storageError } = await this.client.storage.from(BUCKET).remove(paths);
+      if (storageError) throw storageError;
+
+      const { data: deleted, error: deleteError } = await this.client
+        .from('stories')
+        .delete()
+        .eq('id', projectId)
+        .eq('author_id', session.user.id)
+        .select('id')
+        .maybeSingle();
+      if (deleteError) throw deleteError;
+      if (!deleted) throw new Error('No se pudo confirmar la eliminación del trabajo.');
+      return deleted;
+    } catch (error) {
+      logSupabaseError('la eliminación del trabajo', error, { storyId: projectId, authorId: session.user.id });
+      throw normalizeNetworkError(error);
+    }
   }
 }
 

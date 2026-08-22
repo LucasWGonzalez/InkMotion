@@ -1,7 +1,7 @@
 INKMOTION - REGISTRO GENERAL DEL PROYECTO
 =========================================
 
-Ultima actualizacion: 19 de agosto de 2026
+Ultima actualizacion: 22 de agosto de 2026
 Repositorio: https://github.com/LucasWGonzalez/InkMotion
 Rama de produccion: master
 Produccion: https://ink-motion-pied.vercel.app
@@ -45,6 +45,20 @@ Componentes principales:
 
 3. EVOLUCION CRONOLOGICA DE LAS IMPLEMENTACIONES
 ------------------------------------------------
+
+ETAPA ACTUAL - PRUEBA PUBLICA E HISTORIAL DEL AUTOR
+
+- Se incorporo una tarjeta publica "Descargar imagen de prueba" con miniatura
+  optimizada y descarga directa de una Lamina Maestra PDF lista para probar.
+- El panel autenticado ahora incluye "Mis trabajos", con miniatura, titulo, fecha,
+  acceso directo y regeneracion descargable de la Lamina Maestra de cada proyecto.
+- Se agrego eliminacion confirmada por dialogo. La operacion valida la sesion y el
+  author_id, elimina cover.jpg, animation.mp4 y target.mind de Storage y finalmente
+  elimina la fila de stories.
+- La grilla refleja de inmediato la eliminacion e incluye estados de carga, vacio
+  y error sin bloquear el flujo de creacion.
+- Las politicas RLS existentes ya limitan DELETE al autor autenticado y la consulta
+  del historial aplica ademas un filtro explicito por el usuario activo.
 
 ETAPA 1 - BASE DEL REPOSITORIO
 

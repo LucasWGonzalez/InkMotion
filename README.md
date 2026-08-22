@@ -2,6 +2,8 @@
 
 InkMotion convierte una imagen y su animación breve en una obra física aumentada, anclada al papel y lista para imprimir.
 
+Antes de iniciar sesión, cualquier visitante puede descargar una Lámina Maestra de prueba desde `/crear`, imprimirla y probar una experiencia AR ya preparada. Esto permite validar el producto sin tener que crear primero una publicación.
+
 ## Flujo del autor
 
 1. Inicia sesión con Google en `/crear`.
@@ -9,6 +11,7 @@ InkMotion convierte una imagen y su animación breve en una obra física aumenta
 3. Sube un video loop MP4 H.264 de 3 a 10 segundos y hasta 15 MB.
 4. InkMotion muestra una vista previa comparativa con peso, duración y resolución, y verifica automáticamente la relación de aspecto.
 5. Publica la obra y descarga `InkMotion_Lamina_Final.pdf` a 300 DPI.
+6. Desde **Mis trabajos**, vuelve a abrir sus experiencias anteriores, regenera y descarga su Lámina Maestra o elimina una publicación y sus archivos con confirmación previa.
 
 La imagen y el video deben conservar la misma proporción y encuadre. Se recomienda un loop breve, sin movimiento de cámara y con cambios internos sutiles. Para obtener mayor compatibilidad entre generadores, conviene preparar la imagen en 16:9 o 9:16 antes de animarla, porque algunas herramientas pueden recortar o reencuadrar otras proporciones.
 
@@ -39,6 +42,8 @@ Esto diferencia InkMotion de un QR enlazado a un reproductor: el contenido no se
 - Vercel para hosting y rutas `/crear` y `/v/:id`.
 
 Cada publicación almacena `cover.jpg`, `animation.mp4`, `target.mind` y una fila en `stories` con `image_path`, `video_path`, `target_path` y configuración.
+
+El historial consulta `stories` filtrando por el `author_id` de la sesión activa. Las eliminaciones vuelven a validar la propiedad tanto en la consulta como en las políticas RLS, eliminan los tres archivos del bucket `stories` y luego el registro de base de datos.
 
 La generación de profundidad con Replicate fue retirada del flujo activo. El producto utiliza un único modelo de creación basado en imagen + video para reducir coste, espera y complejidad.
 
