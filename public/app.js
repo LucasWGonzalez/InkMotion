@@ -551,13 +551,20 @@ One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded 
     preview.src = this.recordingResult.url;
     const shareButton = document.getElementById('btn-share-recording');
     const file = this.recordingFile();
-    shareButton.hidden = !(navigator.share && navigator.canShare?.({ files: [file] }));
+    const canShareFile = Boolean(navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] })));
+    shareButton.hidden = !canShareFile;
+    shareButton.disabled = false;
+    document.getElementById('recording-note').textContent = canShareFile
+      ? 'La grabación permanece en tu dispositivo y no se sube a InkMotion.'
+      : 'Este navegador no permite compartir el archivo directamente. Podés descargarlo.';
     document.getElementById('recording-result').showModal();
   }
 
   recordingFile() {
     if (!this.recordingResult) return null;
-    return new File([this.recordingResult.blob], `InkMotion_Experiencia_AR.${this.recordingResult.extension}`, { type: this.recordingResult.type });
+    const extension = this.recordingResult.extension === 'mp4' ? 'mp4' : 'webm';
+    const type = extension === 'mp4' ? 'video/mp4' : 'video/webm';
+    return new File([this.recordingResult.blob], `InkMotion_Experiencia_AR.${extension}`, { type });
   }
 
   downloadExperienceRecording() {
@@ -574,8 +581,25 @@ One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded 
   async shareExperienceRecording() {
     const file = this.recordingFile();
     if (!file) return;
-    try { await navigator.share({ files: [file], title: 'Mi experiencia InkMotion' }); }
-    catch (error) { if (error?.name !== 'AbortError') this.downloadExperienceRecording(); }
+    const button = document.getElementById('btn-share-recording');
+    const note = document.getElementById('recording-note');
+    if (!navigator.share || (navigator.canShare && !navigator.canShare({ files: [file] }))) {
+      note.textContent = 'Este navegador no permite compartir el archivo directamente. Usá Descargar.';
+      return;
+    }
+    button.disabled = true;
+    try {
+      // En iOS, compartir solamente el archivo es más compatible que mezclarlo con title/text.
+      await navigator.share({ files: [file] });
+      note.textContent = 'Compartido desde el menú del dispositivo.';
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('[InkMotion/Share] No se pudo abrir el menú nativo.', error);
+        note.textContent = 'No se pudo abrir el menú Compartir. La grabación no fue descargada automáticamente.';
+      }
+    } finally {
+      button.disabled = false;
+    }
   }
 
   closeExperienceRecording(closeDialog = true) {
