@@ -69,6 +69,8 @@ class InkMotionApp {
     this.publicationProgress = 0;
     this.experienceRecorder = null;
     this.recordingResult = null;
+    this.myProjects = [];
+    this.projectPendingDeletion = null;
     this.bindTrackingEvents();
     this.start();
   }
@@ -98,12 +100,16 @@ class InkMotionApp {
     document.getElementById('btn-copy-link').addEventListener('click', () => this.copyPublishedLink());
     document.getElementById('btn-download-sheet').addEventListener('click', () => this.downloadMasterSheet());
     document.getElementById('btn-retry').addEventListener('click', () => this.retryLastAction());
+    document.getElementById('btn-close-delete').addEventListener('click', () => this.closeDeleteProjectDialog());
+    document.getElementById('btn-cancel-delete').addEventListener('click', () => this.closeDeleteProjectDialog());
+    document.getElementById('btn-confirm-delete').addEventListener('click', () => this.confirmDeleteProject());
+    document.getElementById('delete-project-dialog').addEventListener('cancel', () => { this.projectPendingDeletion = null; });
     const session = await this.store.getSession();
     this.renderAuthorSession(session);
-    if (session) await this.restoreOAuthDraft();
+    if (session) await Promise.all([this.restoreOAuthDraft(), this.loadMyProjects()]);
     this.store.onAuthChange(async (nextSession) => {
       this.renderAuthorSession(nextSession);
-      if (nextSession) await this.restoreOAuthDraft();
+      if (nextSession) await Promise.all([this.restoreOAuthDraft(), this.loadMyProjects()]);
     });
   }
 
@@ -111,6 +117,154 @@ class InkMotionApp {
     document.getElementById('auth-card').hidden = Boolean(session);
     document.getElementById('creator-workspace').hidden = !session;
     if (session) document.getElementById('author-email').textContent = session.user.email || 'Autor';
+    else {
+      this.myProjects = [];
+      document.getElementById('projects-grid').replaceChildren();
+      document.getElementById('projects-count').textContent = '';
+    }
+  }
+
+  async loadMyProjects() {
+    const status = document.getElementById('projects-status');
+    const grid = document.getElementById('projects-grid');
+    status.hidden = false;
+    status.dataset.state = 'loading';
+    status.textContent = 'Cargando tus trabajos…';
+    grid.setAttribute('aria-busy', 'true');
+    try {
+      this.myProjects = await this.store.listMyProjects();
+      this.renderMyProjects();
+    } catch (error) {
+      console.error('[InkMotion] No se pudo cargar Mis trabajos.', error);
+      status.dataset.state = 'error';
+      status.textContent = this.errorMessage(error, 'No pudimos cargar tus trabajos. Actualizá la página para reintentar.');
+    } finally {
+      grid.removeAttribute('aria-busy');
+    }
+  }
+
+  renderMyProjects() {
+    const grid = document.getElementById('projects-grid');
+    const status = document.getElementById('projects-status');
+    const count = document.getElementById('projects-count');
+    grid.replaceChildren();
+    count.textContent = `${this.myProjects.length} ${this.myProjects.length === 1 ? 'trabajo' : 'trabajos'}`;
+    if (!this.myProjects.length) {
+      status.hidden = false;
+      status.dataset.state = 'empty';
+      status.textContent = 'Todavía no publicaste ningún trabajo. Tu primera obra aparecerá acá.';
+      return;
+    }
+    status.hidden = true;
+    const dateFormatter = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+    this.myProjects.forEach((project) => {
+      const article = document.createElement('article');
+      article.className = 'project-card';
+      article.dataset.projectId = project.id;
+
+      const thumbnail = document.createElement('div');
+      thumbnail.className = 'project-thumbnail';
+      const image = document.createElement('img');
+      image.src = project.imageUrl;
+      image.alt = `Miniatura de ${project.title}`;
+      image.loading = 'lazy';
+      thumbnail.append(image);
+
+      const content = document.createElement('div');
+      content.className = 'project-content';
+      const time = document.createElement('time');
+      time.dateTime = project.created_at;
+      time.textContent = `Creado el ${dateFormatter.format(new Date(project.created_at))}`;
+      const title = document.createElement('h3');
+      title.textContent = project.title;
+      const actions = document.createElement('div');
+      actions.className = 'project-actions';
+      const open = document.createElement('a');
+      open.className = 'btn btn-secondary';
+      open.href = `/v/${compactProjectId(project.id)}`;
+      open.target = '_blank';
+      open.rel = 'noopener';
+      open.textContent = 'Abrir experiencia';
+      const download = document.createElement('button');
+      download.className = 'btn btn-primary';
+      download.type = 'button';
+      download.textContent = 'Descargar lámina';
+      download.addEventListener('click', () => this.downloadProjectSheet(project, download));
+      const remove = document.createElement('button');
+      remove.className = 'project-delete-btn';
+      remove.type = 'button';
+      remove.textContent = 'Eliminar';
+      remove.setAttribute('aria-label', `Eliminar ${project.title}`);
+      remove.addEventListener('click', () => this.openDeleteProjectDialog(project));
+      actions.append(open, download, remove);
+      content.append(time, title, actions);
+      article.append(thumbnail, content);
+      grid.append(article);
+    });
+  }
+
+  async downloadProjectSheet(project, button) {
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Preparando PDF…';
+    try {
+      const publicUrl = `${window.location.origin}/v/${compactProjectId(project.id)}`;
+      const sheet = await this.sheetGenerator.compose({
+        illustrationUrl: project.imageUrl,
+        publicUrl,
+        title: project.title,
+      });
+      const pdfBlob = await this.sheetGenerator.createPdf(sheet.jpegDataUrl, sheet.pageSizeMm);
+      const objectUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = 'InkMotion_Lamina_Final.pdf';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+      button.textContent = 'Descargada';
+      window.setTimeout(() => { button.textContent = originalLabel; }, 1_500);
+    } catch (error) {
+      console.error('[InkMotion] No se pudo regenerar la lámina.', error);
+      button.textContent = 'Reintentar descarga';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  openDeleteProjectDialog(project) {
+    this.projectPendingDeletion = project;
+    const dialog = document.getElementById('delete-project-dialog');
+    document.getElementById('delete-project-title').textContent = `“${project.title}”`;
+    document.getElementById('delete-project-status').textContent = '';
+    document.getElementById('btn-confirm-delete').disabled = false;
+    dialog.showModal();
+  }
+
+  closeDeleteProjectDialog() {
+    const dialog = document.getElementById('delete-project-dialog');
+    if (dialog.open) dialog.close();
+    this.projectPendingDeletion = null;
+  }
+
+  async confirmDeleteProject() {
+    const project = this.projectPendingDeletion;
+    if (!project) return;
+    const button = document.getElementById('btn-confirm-delete');
+    const status = document.getElementById('delete-project-status');
+    button.disabled = true;
+    status.textContent = 'Eliminando archivos y publicación…';
+    try {
+      await this.store.deleteProject(project.id);
+      this.myProjects = this.myProjects.filter((item) => item.id !== project.id);
+      this.renderMyProjects();
+      this.closeDeleteProjectDialog();
+    } catch (error) {
+      console.error('[InkMotion] No se pudo eliminar el trabajo.', error);
+      status.textContent = this.errorMessage(error, 'No se pudo eliminar el trabajo. Intentá nuevamente.');
+      button.disabled = false;
+    }
   }
 
   async loginWithGoogle() {
@@ -346,6 +500,7 @@ One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded 
       document.getElementById('publish-result').hidden = false;
       this.setBuildState('published', 'Obra publicada correctamente.', 100);
       this.isPublishing = false;
+      await this.loadMyProjects();
     } catch (error) {
       console.error('[InkMotion] No se pudo publicar el proyecto', {
         message: error?.message,
