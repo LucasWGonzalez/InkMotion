@@ -704,8 +704,8 @@ One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded 
     shareButton.hidden = !canShareFile;
     shareButton.disabled = false;
     document.getElementById('recording-note').textContent = canShareFile
-      ? 'La grabación permanece en tu dispositivo y no se sube a InkMotion.'
-      : 'Este navegador no permite compartir el archivo directamente. Podés descargarlo.';
+      ? 'La grabación todavía no está guardada. Podés guardarla o compartirla. No se sube a InkMotion.'
+      : 'La grabación todavía no está guardada. Este navegador no permite compartirla directamente; podés guardarla.';
     document.getElementById('recording-result').showModal();
   }
 
@@ -713,7 +713,17 @@ One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded 
     if (!this.recordingResult) return null;
     const extension = this.recordingResult.extension === 'mp4' ? 'mp4' : 'webm';
     const type = extension === 'mp4' ? 'video/mp4' : 'video/webm';
-    return new File([this.recordingResult.blob], `InkMotion_Experiencia_AR.${extension}`, { type });
+    if (!this.recordingResult.filename) {
+      const date = new Date();
+      const day = [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+        .map((part, index) => index === 0 ? String(part) : String(part).padStart(2, '0'))
+        .join('-');
+      const time = [date.getHours(), date.getMinutes(), date.getSeconds()]
+        .map((part) => String(part).padStart(2, '0'))
+        .join('-');
+      this.recordingResult.filename = `InkMotion_AR_${day}_${time}.${extension}`;
+    }
+    return new File([this.recordingResult.blob], this.recordingResult.filename, { type });
   }
 
   downloadExperienceRecording() {
@@ -725,6 +735,8 @@ One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded 
     document.body.appendChild(link);
     link.click();
     link.remove();
+    const note = document.getElementById('recording-note');
+    note.textContent = 'Descarga iniciada. Buscá el video en la carpeta Descargas de tu dispositivo.';
   }
 
   async shareExperienceRecording() {
@@ -733,7 +745,7 @@ One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded 
     const button = document.getElementById('btn-share-recording');
     const note = document.getElementById('recording-note');
     if (!navigator.share || (navigator.canShare && !navigator.canShare({ files: [file] }))) {
-      note.textContent = 'Este navegador no permite compartir el archivo directamente. Usá Descargar.';
+      note.textContent = 'Este navegador no permite compartir el archivo directamente. Usá Guardar video.';
       return;
     }
     button.disabled = true;

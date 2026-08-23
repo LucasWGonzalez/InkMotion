@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 const drawCalls = [];
 const fakeTrack = { stop() {} };
@@ -77,4 +78,15 @@ test('compone la cámara y la capa AR en el canvas final', () => {
   assert.equal(drawCalls.length, 2);
   assert.equal(fakeCanvas.width, 720);
   assert.equal(fakeCanvas.height, 1280);
+});
+
+
+test('la interfaz diferencia guardar de compartir y usa nombres únicos', async () => {
+  const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+  const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.match(html, />Guardar video<\/button>/);
+  assert.match(html, /La grabación todavía no está guardada/);
+  assert.match(app, /InkMotion_AR_\$\{day\}_\$\{time\}\.\$\{extension\}/);
+  assert.match(app, /Descarga iniciada\. Buscá el video en la carpeta Descargas/);
+  assert.doesNotMatch(app, /InkMotion_Experiencia_AR\.\$\{extension\}/);
 });
