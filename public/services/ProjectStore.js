@@ -6,6 +6,7 @@ const BUCKET = 'stories';
 const IMAGE_TARGET_LIMIT = 10 * 1024 * 1024;
 const VIDEO_FILE_LIMIT = 15 * 1024 * 1024;
 const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
+const DELETE_CLEANUP_TIMEOUT_MS = 8_000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function errorDetails(error) {
@@ -40,6 +41,18 @@ function normalizeNetworkError(error) {
   const friendly = new Error(NETWORK_ERROR_MESSAGE, { cause: error });
   friendly.code = 'NETWORK_ERROR';
   return friendly;
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      const error = new Error(message);
+      error.code = 'DELETE_CLEANUP_TIMEOUT';
+      reject(error);
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
 }
 
 class ProjectStore {
@@ -255,9 +268,6 @@ class ProjectStore {
       if (!project) throw new Error('El trabajo no existe o no pertenece a tu cuenta.');
 
       const paths = [project.image_path, project.video_path, project.target_path].filter(Boolean);
-      const { error: storageError } = await this.client.storage.from(BUCKET).remove(paths);
-      if (storageError) throw storageError;
-
       const { data: deleted, error: deleteError } = await this.client
         .from('stories')
         .delete()
@@ -267,7 +277,26 @@ class ProjectStore {
         .maybeSingle();
       if (deleteError) throw deleteError;
       if (!deleted) throw new Error('No se pudo confirmar la eliminación del trabajo.');
-      return deleted;
+
+      let cleanupWarning = null;
+      if (paths.length) {
+        try {
+          const { error: storageError } = await withTimeout(
+            this.client.storage.from(BUCKET).remove(paths),
+            DELETE_CLEANUP_TIMEOUT_MS,
+            'La publicación se eliminó, pero la limpieza de archivos tardó demasiado.',
+          );
+          if (storageError) throw storageError;
+        } catch (cleanupError) {
+          cleanupWarning = 'La publicación se eliminó correctamente, aunque algunos archivos no pudieron limpiarse.';
+          logSupabaseError('la limpieza de archivos del trabajo eliminado', cleanupError, {
+            storyId: projectId,
+            authorId: session.user.id,
+            paths,
+          });
+        }
+      }
+      return { ...deleted, cleanupWarning };
     } catch (error) {
       logSupabaseError('la eliminación del trabajo', error, { storyId: projectId, authorId: session.user.id });
       throw normalizeNetworkError(error);

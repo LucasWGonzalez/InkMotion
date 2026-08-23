@@ -20,6 +20,10 @@ test('Mis trabajos exige filtro de autor y borrado propietario', async () => {
   assert.match(source, /\.eq\('author_id', session\.user\.id\)/);
   assert.match(source, /async deleteProject\(projectId\)/);
   assert.match(source, /storage\.from\(BUCKET\)\.remove\(paths\)/);
+  assert.match(source, /DELETE_CLEANUP_TIMEOUT_MS/);
+  const deleteBlock = source.slice(source.indexOf('async deleteProject(projectId)'));
+  assert.ok(deleteBlock.indexOf(".delete()") < deleteBlock.indexOf('storage.from(BUCKET).remove(paths)'), 'el registro debe eliminarse antes de limpiar Storage');
+  assert.match(deleteBlock, /return \{ \.\.\.deleted, cleanupWarning \}/);
 });
 
 test('cada trabajo permite regenerar y descargar su Lámina Maestra', async () => {
