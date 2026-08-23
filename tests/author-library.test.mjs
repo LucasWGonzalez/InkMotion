@@ -5,6 +5,7 @@ import test from 'node:test';
 const htmlPath = new URL('../public/index.html', import.meta.url);
 const storePath = new URL('../public/services/ProjectStore.js', import.meta.url);
 const routesCssPath = new URL('../public/css/routes.css', import.meta.url);
+const sheetGeneratorPath = new URL('../public/core/MasterSheetGenerator.js', import.meta.url);
 
 test('la hoja de prueba conserva el texto y apunta al PDF incluido', async () => {
   const html = await readFile(htmlPath, 'utf8');
@@ -38,4 +39,13 @@ test('cada trabajo permite regenerar y descargar su Lámina Maestra', async () =
   assert.match(source, /actions\.append\(download, remove\)/);
   assert.match(source, /async downloadProjectSheet\(project, button\)/);
   assert.match(source, /link\.download = 'InkMotion_Lamina_Final\.pdf'/);
+});
+
+
+test('las láminas históricas cargan imágenes remotas con CORS antes de exportar el canvas', async () => {
+  const source = await readFile(sheetGeneratorPath, 'utf8');
+  const crossOriginIndex = source.indexOf("image.crossOrigin = 'anonymous'");
+  const sourceIndex = source.indexOf('image.src = source');
+  assert.ok(crossOriginIndex >= 0, 'la imagen remota debe habilitar CORS');
+  assert.ok(crossOriginIndex < sourceIndex, 'crossOrigin debe configurarse antes de asignar src');
 });

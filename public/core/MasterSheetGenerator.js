@@ -31,6 +31,7 @@ async function loadPdfLibrary() {
 function loadImage(source) {
   return new Promise((resolve, reject) => {
     const image = new Image();
+    image.crossOrigin = 'anonymous';
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error('No se pudo cargar la ilustración para crear la lámina.'));
     image.src = source;
