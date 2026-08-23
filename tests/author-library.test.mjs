@@ -32,6 +32,10 @@ test('Mis trabajos exige filtro de autor y borrado propietario', async () => {
 test('cada trabajo permite regenerar y descargar su Lámina Maestra', async () => {
   const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(source, /download\.textContent = 'Descargar lámina'/);
+  assert.match(source, /remove\.className = 'btn btn-danger'/);
+  assert.match(source, /remove\.textContent = 'Eliminar trabajo'/);
+  assert.doesNotMatch(source, /open\.textContent = 'Abrir experiencia'/);
+  assert.match(source, /actions\.append\(download, remove\)/);
   assert.match(source, /async downloadProjectSheet\(project, button\)/);
   assert.match(source, /link\.download = 'InkMotion_Lamina_Final\.pdf'/);
 });
