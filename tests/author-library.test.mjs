@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const htmlPath = new URL('../public/index.html', import.meta.url);
 const storePath = new URL('../public/services/ProjectStore.js', import.meta.url);
+const routesCssPath = new URL('../public/css/routes.css', import.meta.url);
 
 test('la hoja de prueba conserva el texto y apunta al PDF incluido', async () => {
   const html = await readFile(htmlPath, 'utf8');
@@ -12,6 +13,8 @@ test('la hoja de prueba conserva el texto y apunta al PDF incluido', async () =>
   assert.match(html, /href="\/assets\/InkMotion_Lamina_Prueba\.pdf"/);
   await access(new URL('../public/assets/InkMotion_Lamina_Prueba.pdf', import.meta.url));
   await access(new URL('../public/assets/inkmotion-lamina-prueba-preview.webp', import.meta.url));
+  const css = await readFile(routesCssPath, 'utf8');
+  assert.doesNotMatch(css, /\.test-sheet-preview[^}]*transform\s*:\s*rotate/, 'la vista previa debe quedar recta');
 });
 
 test('Mis trabajos exige filtro de autor y borrado propietario', async () => {
