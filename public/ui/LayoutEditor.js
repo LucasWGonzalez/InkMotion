@@ -1,6 +1,6 @@
 import MasterSheetGenerator, { DEFAULT_LAYOUT, normalizeLayout } from '../core/MasterSheetGenerator.js';
 
-const STORAGE_KEY = 'inkmotion-layout-v3';
+const STORAGE_KEY = 'inkmotion-layout-v4';
 const PREVIEW_URL = 'https://ink-motion-pied.vercel.app/v/preview';
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const generator = new MasterSheetGenerator();
@@ -13,12 +13,16 @@ function el(id) { return document.getElementById(id); }
 function isCustom() { return layout.page.mode === 'artwork'; }
 
 function ensureUi() {
-  if (el('layout-studio')) return true;
+  const existing = el('layout-studio');
+  if (existing) existing.remove();
   const form = el('publish-form');
   if (!form) return false;
-  if (!document.querySelector('link[href="/css/layout-editor.css"]')) {
-    const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = '/css/layout-editor.css'; document.head.append(link);
-  }
+  const oldCss = document.querySelector('link[href^="/css/layout-editor.css"]');
+  if (oldCss) oldCss.remove();
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/css/layout-editor.css?v=4';
+  document.head.append(link);
   const section = document.createElement('section');
   section.id = 'layout-studio'; section.className = 'card layout-studio';
   section.innerHTML = `
@@ -26,13 +30,13 @@ function ensureUi() {
     <div class="layout-mode-switch" role="group" aria-label="Modo de diseño"><button id="layout-mode-classic" class="layout-mode-card is-active" type="button"><strong>Clásico</strong><span>Recomendado · máxima compatibilidad</span></button><button id="layout-mode-custom" class="layout-mode-card" type="button"><strong>Personalizado</strong><span>Integra QR y marco a la pieza</span></button></div>
     <div class="layout-studio-grid">
       <div class="layout-preview-shell"><div id="layout-preview-stage" class="layout-preview-stage"><div id="layout-empty" class="layout-empty"><strong>Subí una imagen para ver el diseño final</strong><span>La vista previa será la misma composición que se imprimirá y compilará para WebAR.</span></div><canvas id="layout-preview-canvas" class="layout-final-canvas" hidden aria-label="Vista previa final de la lámina"></canvas><div id="layout-preview-loading" class="layout-preview-loading" hidden>Actualizando diseño…</div></div><div class="layout-preview-note"><span id="layout-preview-label">Formato clásico InkMotion</span><span>Preview = PDF = target AR</span></div></div>
-      <div id="layout-classic-info" class="layout-classic-info"><strong>Formato clásico activo</strong><p>InkMotion mantiene el paspartú, el marco técnico y el QR exterior en la composición ya validada para impresión y tracking.</p><div class="layout-benefits"><span>✓ QR protegido</span><span>✓ Marco técnico estable</span><span>✓ Máxima compatibilidad WebAR</span></div><button id="layout-start-custom" class="btn btn-secondary" type="button">Personalizar diseño</button></div>
+      <div id="layout-classic-info" class="layout-classic-info"><strong>Formato clásico activo</strong><p>InkMotion mantiene el paspartú, el marco técnico y el QR exterior en la composición ya validada para impresión y tracking.</p><div class="layout-benefits"><span>✓ QR con área blanca segura</span><span>✓ Marco técnico estable</span><span>✓ Máxima compatibilidad WebAR</span></div><button id="layout-start-custom" class="btn btn-secondary" type="button">Personalizar diseño</button></div>
       <div id="layout-controls" class="layout-controls" hidden>
         <section class="layout-control-group"><div class="layout-group-head"><div><span class="layout-step">1</span><h4>Código QR</h4></div><small>Elegí una ubicación segura</small></div>
           <label class="layout-field-label">Ubicación</label><div class="layout-segmented" role="group" aria-label="Ubicación del QR"><button type="button" data-qr-placement="inside">Dentro de la obra</button><button type="button" data-qr-placement="outside">Fuera de la obra</button></div>
           <div id="qr-position-section"><label class="layout-field-label">Posición</label><div class="position-grid"><button type="button" data-qr-position="top-left"><span class="position-preview"><i class="qr-dot tl"></i></span><b>Arriba izq.</b></button><button type="button" data-qr-position="top-right"><span class="position-preview"><i class="qr-dot tr"></i></span><b>Arriba der.</b></button><button type="button" data-qr-position="center"><span class="position-preview"><i class="qr-dot cc"></i></span><b>Centro</b></button><button type="button" data-qr-position="bottom-left"><span class="position-preview"><i class="qr-dot bl"></i></span><b>Abajo izq.</b></button><button type="button" data-qr-position="bottom-right"><span class="position-preview"><i class="qr-dot br"></i></span><b>Abajo der.</b></button></div></div>
-          <label class="layout-field-label">Tamaño</label><div class="layout-choice-row" role="group" aria-label="Tamaño del QR"><button type="button" data-qr-size="discreet"><strong>Discreto</strong><small>10%</small></button><button type="button" data-qr-size="balanced"><strong>Equilibrado</strong><small>13,5%</small></button><button type="button" data-qr-size="scan"><strong>Fácil de escanear</strong><small>17%</small></button></div>
-          <label class="layout-field-label">Fondo</label><div class="layout-choice-row two" role="group" aria-label="Fondo del QR"><button type="button" data-qr-style="protected"><strong>Protegido</strong><small>Blanco sólido</small></button><button type="button" data-qr-style="integrated"><strong>Integrado</strong><small>Blanco suave</small></button></div>
+          <label class="layout-field-label">Tamaño</label><div class="layout-choice-row" role="group" aria-label="Tamaño del QR"><button type="button" data-qr-size="discreet"><strong>Discreto</strong><small>Ocupa menos espacio</small></button><button type="button" data-qr-size="balanced"><strong>Equilibrado</strong><small>Recomendado</small></button><button type="button" data-qr-size="scan"><strong>Más visible</strong><small>Más fácil de escanear</small></button></div>
+          <label class="layout-field-label">Área detrás del QR</label><div class="layout-choice-row two" role="group" aria-label="Área detrás del QR"><button type="button" data-qr-style="protected"><strong>Blanco sólido</strong><small>Recomendado · máxima lectura</small></button><button type="button" data-qr-style="integrated"><strong>Blanco suave</strong><small>Más discreto visualmente</small></button></div><small class="layout-safety-note">Ambas opciones conservan una zona clara alrededor del código para que la cámara pueda leerlo. La diferencia es únicamente visual.</small>
         </section>
         <section class="layout-control-group"><div class="layout-group-head"><div><span class="layout-step">2</span><h4>Marco</h4></div><small>La capa técnica AR se conserva siempre</small></div>
           <label class="layout-field-label">Ubicación del marco</label><div class="layout-choice-row two" role="group" aria-label="Ubicación del marco"><button type="button" data-frame-placement="outside"><strong>Exterior</strong><small>No invade la obra</small></button><button type="button" data-frame-placement="inside"><strong>Sobre la obra</strong><small>Más integrado</small></button></div>
