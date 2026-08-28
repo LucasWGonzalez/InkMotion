@@ -1,3 +1,4 @@
+import '../ui/LayoutEditor.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.102.0';
 
 const SUPABASE_URL='https://srcofwiuobmvezkodscg.supabase.co';
