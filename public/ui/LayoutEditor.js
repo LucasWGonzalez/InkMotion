@@ -1,182 +1,21 @@
 import { renderStoryQR } from '../utils/QRGenerator.js';
 import { DEFAULT_LAYOUT, normalizeLayout } from '../core/MasterSheetGenerator.js';
 
-const STORAGE_KEY = 'inkmotion-layout-v1';
-const clone = (value) => JSON.parse(JSON.stringify(value));
-let layout = normalizeLayout(loadSaved() || DEFAULT_LAYOUT);
-window.InkMotionLayoutConfig = clone(layout);
-
-function loadSaved() {
-  try { return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || 'null'); }
-  catch { return null; }
-}
-
-function save() {
-  window.InkMotionLayoutConfig = clone(layout);
-  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(layout)); } catch {}
-  renderPreview();
-  updateStatus();
-}
-
-function el(id) { return document.getElementById(id); }
-function pct(value) { return `${Math.round(value * 100)}%`; }
-
-function setPreset(name) {
-  layout.frame.preset = name;
-  document.querySelectorAll('[data-frame-preset]').forEach((button) => {
-    button.classList.toggle('is-active', button.dataset.framePreset === name);
-    button.setAttribute('aria-pressed', button.dataset.framePreset === name ? 'true' : 'false');
-  });
-  save();
-}
-
-function syncControls() {
-  el('layout-qr-placement').value = layout.qr.placement;
-  el('layout-qr-size').value = layout.qr.scale;
-  el('layout-qr-size-value').textContent = pct(layout.qr.scale);
-  el('layout-qr-background').value = layout.qr.background;
-  el('layout-frame-color').value = layout.frame.color;
-  el('layout-frame-width').value = layout.frame.width;
-  el('layout-frame-width-value').textContent = `${(layout.frame.width * 100).toFixed(1)}%`;
-  el('layout-frame-auto').checked = layout.frame.autoColor;
-  setPreset(layout.frame.preset);
-}
-
-async function drawQrPreview() {
-  const canvas = el('layout-qr-canvas');
-  if (!canvas || canvas.dataset.ready === 'true') return;
-  try {
-    await renderStoryQR(canvas, 'https://ink-motion-pied.vercel.app/v/preview', { width: 256, margin: 3, errorCorrectionLevel: 'H' });
-    canvas.dataset.ready = 'true';
-  } catch (error) {
-    console.warn('[InkMotion/Layout] No se pudo dibujar el QR de preview.', error);
-  }
-}
-
-function renderPreview() {
-  const source = el('author-preview');
-  const previewImage = el('layout-preview-image');
-  const stage = el('layout-preview-stage');
-  const qr = el('layout-qr-handle');
-  const frame = el('layout-frame-preview');
-  const outsideBand = el('layout-outside-band');
-  if (!source || !previewImage || !stage || !qr || !frame) return;
-  if (source.src) {
-    previewImage.src = source.src;
-    stage.classList.add('has-image');
-  }
-  frame.dataset.preset = layout.frame.preset;
-  frame.style.setProperty('--frame-color', layout.frame.autoColor ? 'currentColor' : layout.frame.color);
-  frame.style.setProperty('--frame-width', `${Math.max(1, layout.frame.width * 500)}px`);
-  frame.classList.toggle('is-auto', layout.frame.autoColor);
-  qr.style.width = `${layout.qr.scale * 100}%`;
-  qr.style.left = `${layout.qr.x * 100}%`;
-  qr.style.top = `${layout.qr.y * 100}%`;
-  qr.dataset.background = layout.qr.background;
-  const outside = layout.qr.placement === 'outside';
-  stage.classList.toggle('qr-outside', outside);
-  outsideBand.hidden = !outside;
-  qr.classList.toggle('is-outside', outside);
-  qr.setAttribute('aria-label', outside ? 'QR en banda exterior' : 'Arrastrá para ubicar el QR dentro de la obra');
-  if (outside) {
-    qr.style.left = 'auto';
-    qr.style.top = 'auto';
-    qr.style.right = '4%';
-    qr.style.bottom = '-23%';
-  } else {
-    qr.style.removeProperty('right');
-    qr.style.removeProperty('bottom');
-  }
-  drawQrPreview();
-}
-
-function updateStatus() {
-  const status = el('layout-quality');
-  if (!status) return;
-  const qrSafe = layout.qr.placement === 'outside' || layout.qr.scale >= 0.105;
-  const frameSafe = layout.frame.preset === 'none' || layout.frame.width >= 0.0035;
-  const message = !qrSafe
-    ? 'Revisar · aumentá el tamaño del QR para una lectura más confiable.'
-    : !frameSafe
-      ? 'Revisar · el marco es demasiado fino para impresión.'
-      : 'Diseño listo · InkMotion hará la validación final del tracking al publicar.';
-  status.dataset.state = qrSafe && frameSafe ? 'good' : 'warning';
-  status.textContent = message;
-}
-
-function bindDrag() {
-  const qr = el('layout-qr-handle');
-  const art = el('layout-artwork');
-  if (!qr || !art) return;
-  let dragging = false;
-  const move = (event) => {
-    if (!dragging || layout.qr.placement !== 'inside') return;
-    const rect = art.getBoundingClientRect();
-    const sizePx = Math.min(rect.width, rect.height) * layout.qr.scale;
-    const x = Math.max(0, Math.min(rect.width - sizePx, event.clientX - rect.left - sizePx / 2));
-    const y = Math.max(0, Math.min(rect.height - sizePx, event.clientY - rect.top - sizePx / 2));
-    layout.qr.x = x / rect.width;
-    layout.qr.y = y / rect.height;
-    save();
-  };
-  qr.addEventListener('pointerdown', (event) => {
-    if (layout.qr.placement !== 'inside') return;
-    dragging = true;
-    qr.setPointerCapture?.(event.pointerId);
-    event.preventDefault();
-  });
-  qr.addEventListener('pointermove', move);
-  qr.addEventListener('pointerup', () => { dragging = false; });
-  qr.addEventListener('pointercancel', () => { dragging = false; });
-}
-
-function bindControls() {
-  el('layout-qr-placement').addEventListener('change', (event) => { layout.qr.placement = event.target.value; save(); });
-  el('layout-qr-size').addEventListener('input', (event) => {
-    layout.qr.scale = Number(event.target.value);
-    el('layout-qr-size-value').textContent = pct(layout.qr.scale);
-    save();
-  });
-  el('layout-qr-background').addEventListener('change', (event) => { layout.qr.background = event.target.value; save(); });
-  el('layout-frame-color').addEventListener('input', (event) => { layout.frame.color = event.target.value; layout.frame.autoColor = false; el('layout-frame-auto').checked = false; save(); });
-  el('layout-frame-width').addEventListener('input', (event) => {
-    layout.frame.width = Number(event.target.value);
-    el('layout-frame-width-value').textContent = `${(layout.frame.width * 100).toFixed(1)}%`;
-    save();
-  });
-  el('layout-frame-auto').addEventListener('change', (event) => { layout.frame.autoColor = event.target.checked; save(); });
-  document.querySelectorAll('[data-frame-preset]').forEach((button) => button.addEventListener('click', () => setPreset(button.dataset.framePreset)));
-  document.querySelectorAll('[data-qr-position]').forEach((button) => button.addEventListener('click', () => {
-    const positions = { tl: [0.035, 0.035], tr: [0.82, 0.035], bl: [0.035, 0.82], br: [0.82, 0.82] };
-    [layout.qr.x, layout.qr.y] = positions[button.dataset.qrPosition] || positions.br;
-    layout.qr.placement = 'inside';
-    el('layout-qr-placement').value = 'inside';
-    save();
-  }));
-  el('layout-reset').addEventListener('click', () => {
-    layout = normalizeLayout(DEFAULT_LAYOUT);
-    syncControls();
-    save();
-  });
-}
-
-function observeArtwork() {
-  const source = el('author-preview');
-  if (!source) return;
-  const observer = new MutationObserver(renderPreview);
-  observer.observe(source, { attributes: true, attributeFilter: ['src', 'hidden'] });
-  source.addEventListener('load', renderPreview);
-}
-
-function start() {
-  if (!el('layout-studio')) return;
-  syncControls();
-  bindControls();
-  bindDrag();
-  observeArtwork();
-  renderPreview();
-  updateStatus();
-}
-
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
-else start();
+const STORAGE_KEY='inkmotion-layout-v1';
+const clone=v=>JSON.parse(JSON.stringify(v));
+let layout=normalizeLayout(loadSaved()||DEFAULT_LAYOUT);
+window.InkMotionLayoutConfig=clone(layout);
+function loadSaved(){try{return JSON.parse(sessionStorage.getItem(STORAGE_KEY)||'null');}catch{return null;}}
+function el(id){return document.getElementById(id);} function pct(v){return `${Math.round(v*100)}%`;}
+function ensureUi(){if(el('layout-studio'))return true;const form=el('publish-form');if(!form)return false;if(!document.querySelector('link[href="/css/layout-editor.css"]')){const link=document.createElement('link');link.rel='stylesheet';link.href='/css/layout-editor.css';document.head.append(link);}const section=document.createElement('section');section.id='layout-studio';section.className='card layout-studio';section.innerHTML=`<div class="layout-studio-head"><div><span class="eyebrow">2 · DISEÑO DE OBRA</span><h3>Personalizá la pieza que vas a imprimir</h3><p>Integrá el QR dentro de la composición y elegí un marco visual. La misma pieza final se usa como marcador AR.</p></div><button id="layout-reset" class="text-btn layout-reset" type="button">Restablecer diseño</button></div><div class="layout-studio-grid"><div class="layout-preview-shell"><div id="layout-preview-stage" class="layout-preview-stage"><div id="layout-outside-band" class="layout-outside-band" hidden></div><div id="layout-artwork" class="layout-artwork"><img id="layout-preview-image" alt="Vista previa del diseño"><div id="layout-frame-preview" class="layout-frame-preview" data-preset="minimal"></div><div id="layout-qr-handle" class="layout-qr-handle" data-background="white"><canvas id="layout-qr-canvas" width="256" height="256"></canvas></div></div></div><div class="layout-preview-note"><span>Vista previa de composición</span><span>Arrastrá el QR cuando esté dentro de la obra</span></div></div><div class="layout-controls"><div class="layout-control-group"><h4>Código QR</h4><div class="layout-control-row"><label for="layout-qr-placement">Ubicación</label><select id="layout-qr-placement"><option value="inside">Dentro de la obra</option><option value="outside">Banda exterior</option></select></div><div class="layout-control-row"><label for="layout-qr-size">Tamaño</label><span id="layout-qr-size-value" class="layout-value">13%</span><input id="layout-qr-size" type="range" min="0.09" max="0.22" step="0.005"></div><div class="layout-control-row"><label for="layout-qr-background">Fondo</label><select id="layout-qr-background"><option value="white">Blanco</option><option value="soft">Blanco suave</option><option value="none">Sin fondo extra</option></select></div><div class="qr-positions"><button class="layout-chip" type="button" data-qr-position="tl">↖</button><button class="layout-chip" type="button" data-qr-position="tr">↗</button><button class="layout-chip" type="button" data-qr-position="bl">↙</button><button class="layout-chip" type="button" data-qr-position="br">↘</button></div></div><div class="layout-control-group"><h4>Marco</h4><div class="frame-presets"><button class="layout-chip" type="button" data-frame-preset="none">Sin marco</button><button class="layout-chip" type="button" data-frame-preset="minimal">Minimal</button><button class="layout-chip" type="button" data-frame-preset="editorial">Editorial</button><button class="layout-chip" type="button" data-frame-preset="technical">Técnico</button><button class="layout-chip" type="button" data-frame-preset="integrated">Integrado</button></div><div class="layout-control-row"><label for="layout-frame-color">Color</label><input id="layout-frame-color" type="color"></div><label class="layout-auto"><input id="layout-frame-auto" type="checkbox"> Adaptar color a la obra</label><div class="layout-control-row"><label for="layout-frame-width">Grosor</label><span id="layout-frame-width-value" class="layout-value"></span><input id="layout-frame-width" type="range" min="0.0025" max="0.018" step="0.0005"></div></div><p id="layout-quality" class="layout-quality" data-state="good"></p></div></div>`;form.parentNode.insertBefore(section,form);return true;}
+function save(){window.InkMotionLayoutConfig=clone(layout);try{sessionStorage.setItem(STORAGE_KEY,JSON.stringify(layout));}catch{}renderPreview();updateStatus();}
+function setPreset(name){layout.frame.preset=name;document.querySelectorAll('[data-frame-preset]').forEach(b=>{const active=b.dataset.framePreset===name;b.classList.toggle('is-active',active);b.setAttribute('aria-pressed',active?'true':'false');});save();}
+function syncControls(){el('layout-qr-placement').value=layout.qr.placement;el('layout-qr-size').value=layout.qr.scale;el('layout-qr-size-value').textContent=pct(layout.qr.scale);el('layout-qr-background').value=layout.qr.background;el('layout-frame-color').value=layout.frame.color;el('layout-frame-width').value=layout.frame.width;el('layout-frame-width-value').textContent=`${(layout.frame.width*100).toFixed(1)}%`;el('layout-frame-auto').checked=layout.frame.autoColor;setPreset(layout.frame.preset);}
+async function drawQrPreview(){const canvas=el('layout-qr-canvas');if(!canvas||canvas.dataset.ready==='true')return;try{await renderStoryQR(canvas,'https://ink-motion-pied.vercel.app/v/preview',{width:256,margin:3,errorCorrectionLevel:'H'});canvas.dataset.ready='true';}catch(error){console.warn('[InkMotion/Layout] QR preview',error);}}
+function renderPreview(){const source=el('author-preview'),preview=el('layout-preview-image'),stage=el('layout-preview-stage'),qr=el('layout-qr-handle'),frame=el('layout-frame-preview'),band=el('layout-outside-band');if(!source||!preview||!stage||!qr||!frame)return;if(source.src)preview.src=source.src;frame.dataset.preset=layout.frame.preset;frame.style.setProperty('--frame-color',layout.frame.autoColor?'currentColor':layout.frame.color);frame.style.setProperty('--frame-width',`${Math.max(1,layout.frame.width*500)}px`);frame.classList.toggle('is-auto',layout.frame.autoColor);qr.style.width=`${layout.qr.scale*100}%`;qr.dataset.background=layout.qr.background;const outside=layout.qr.placement==='outside';stage.classList.toggle('qr-outside',outside);band.hidden=!outside;qr.classList.toggle('is-outside',outside);if(outside){qr.style.left='auto';qr.style.top='auto';qr.style.right='4%';qr.style.bottom='-23%';}else{qr.style.removeProperty('right');qr.style.removeProperty('bottom');qr.style.left=`${layout.qr.x*100}%`;qr.style.top=`${layout.qr.y*100}%`;}drawQrPreview();}
+function updateStatus(){const status=el('layout-quality');if(!status)return;const okQr=layout.qr.placement==='outside'||layout.qr.scale>=.105,okFrame=layout.frame.preset==='none'||layout.frame.width>=.0035;status.dataset.state=okQr&&okFrame?'good':'warning';status.textContent=!okQr?'Revisar · aumentá el tamaño del QR.':!okFrame?'Revisar · el marco es demasiado fino para impresión.':'Diseño listo · InkMotion hará la validación final del tracking al publicar.';}
+function bindDrag(){const qr=el('layout-qr-handle'),art=el('layout-artwork');let dragging=false;qr.addEventListener('pointerdown',e=>{if(layout.qr.placement!=='inside')return;dragging=true;qr.setPointerCapture?.(e.pointerId);e.preventDefault();});qr.addEventListener('pointermove',e=>{if(!dragging||layout.qr.placement!=='inside')return;const r=art.getBoundingClientRect(),size=Math.min(r.width,r.height)*layout.qr.scale,x=Math.max(0,Math.min(r.width-size,e.clientX-r.left-size/2)),y=Math.max(0,Math.min(r.height-size,e.clientY-r.top-size/2));layout.qr.x=x/r.width;layout.qr.y=y/r.height;save();});['pointerup','pointercancel'].forEach(name=>qr.addEventListener(name,()=>dragging=false));}
+function bindControls(){el('layout-qr-placement').addEventListener('change',e=>{layout.qr.placement=e.target.value;save();});el('layout-qr-size').addEventListener('input',e=>{layout.qr.scale=Number(e.target.value);el('layout-qr-size-value').textContent=pct(layout.qr.scale);save();});el('layout-qr-background').addEventListener('change',e=>{layout.qr.background=e.target.value;save();});el('layout-frame-color').addEventListener('input',e=>{layout.frame.color=e.target.value;layout.frame.autoColor=false;el('layout-frame-auto').checked=false;save();});el('layout-frame-width').addEventListener('input',e=>{layout.frame.width=Number(e.target.value);el('layout-frame-width-value').textContent=`${(layout.frame.width*100).toFixed(1)}%`;save();});el('layout-frame-auto').addEventListener('change',e=>{layout.frame.autoColor=e.target.checked;save();});document.querySelectorAll('[data-frame-preset]').forEach(b=>b.addEventListener('click',()=>setPreset(b.dataset.framePreset)));document.querySelectorAll('[data-qr-position]').forEach(b=>b.addEventListener('click',()=>{const p={tl:[.035,.035],tr:[.82,.035],bl:[.035,.82],br:[.82,.82]};[layout.qr.x,layout.qr.y]=p[b.dataset.qrPosition];layout.qr.placement='inside';syncControls();save();}));el('layout-reset').addEventListener('click',()=>{layout=normalizeLayout(DEFAULT_LAYOUT);syncControls();save();});}
+function observeArtwork(){const source=el('author-preview');if(!source)return;new MutationObserver(renderPreview).observe(source,{attributes:true,attributeFilter:['src','hidden']});source.addEventListener('load',renderPreview);}
+function start(){if(!ensureUi())return;syncControls();bindControls();bindDrag();observeArtwork();renderPreview();updateStatus();}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
