@@ -1,7 +1,7 @@
 INKMOTION - REGISTRO GENERAL DEL PROYECTO
 =========================================
 
-Ultima actualizacion: 22 de agosto de 2026
+Ultima actualizacion: 28 de agosto de 2026
 Repositorio: https://github.com/LucasWGonzalez/InkMotion
 Rama de produccion: master
 Produccion: https://ink-motion-pied.vercel.app
@@ -11,288 +11,478 @@ Panel de autor: https://ink-motion-pied.vercel.app/crear
 1. VISION DEL PRODUCTO
 ----------------------
 
-InkMotion comenzo como un visor WebAR experimental con efecto parallax 2.5D y
-evoluciono hacia una plataforma de "Obras Vivas": permite convertir ilustraciones,
-historietas, portadas y posters en experiencias de realidad aumentada accesibles
-desde el navegador del celular.
+InkMotion evoluciono desde un visor WebAR experimental hacia una plataforma de
+publicacion fisica aumentada. Su objetivo es permitir que una obra impresa cobre
+vida desde el navegador del telefono, sin necesidad de instalar una aplicacion.
 
-El flujo buscado es:
+El foco actual del MVP esta en:
 
-1) El autor inicia sesion y sube una ilustracion.
-2) La aplicacion prepara la imagen, compone la Lamina Maestra y genera el target
-   de seguimiento con un identificador unico.
-3) InkMotion publica un enlace corto /v/:id integrado en el QR y entrega un PDF.
-4) El lector escanea el QR, habilita la camara y apunta a la lamina completa.
-5) MindAR reconoce la lamina y fija sobre ella la escena Three.js con profundidad,
-   respiracion y particulas, sin depender de la inclinacion del telefono.
+- imagen + video loop como unico flujo activo;
+- composicion e impresion profesional;
+- maquetacion flexible para distintos soportes fisicos;
+- QR integrado o exterior;
+- marcos visuales compatibles con tracking;
+- estabilidad y robustez de MindAR;
+- compatibilidad hacia atras con publicaciones ya existentes.
+
+La integracion de pagos queda pausada temporalmente mientras se fortalece esta
+capa de producto.
+
+Casos de uso objetivo actuales:
+
+- tapas y contratapas de libros;
+- menus de restaurantes;
+- manuales tecnicos y exploded views;
+- packaging y etiquetas;
+- posters y laminas educativas;
+- piezas editoriales que necesiten una capa WebAR sin app nativa.
 
 
-2. TECNOLOGIA Y ARQUITECTURA ACTUAL
------------------------------------
+2. ARQUITECTURA ACTUAL
+----------------------
 
-La implementacion actual es una aplicacion web modular en JavaScript, HTML y CSS.
-No utiliza React ni Tailwind CSS en esta version del repositorio. Esta aclaracion
-es importante para que futuras tareas se integren con la base real del proyecto.
+InkMotion es una aplicacion web modular en JavaScript ES Modules, HTML y CSS.
+No utiliza React ni Tailwind en la version actual.
 
 Componentes principales:
 
-- Three.js: render 3D, plano subdividido, shader de profundidad y particulas.
-- MindAR Image Tracking 1.2.5: compilacion del target y anclaje sobre la pagina.
-- Supabase: autenticacion, base de datos y almacenamiento de archivos.
-- Vercel: hosting, rutas limpias y despliegue automatico desde master.
-- JavaScript ES Modules: separacion entre motor AR, procesamiento, datos y UI.
+- public/app.js
+  Coordina rutas, carga de archivos, estados de UI, publicacion y lector.
+
+- public/core/ImageProcessor.js
+  Valida, redimensiona y comprime las imagenes antes de publicar.
+
+- public/core/VideoProcessor.js
+  Inspecciona formato, peso, duracion, resolucion y relacion de aspecto del video.
+
+- public/core/MasterSheetGenerator.js
+  Genera la pieza imprimible. Mantiene dos caminos:
+  * composeLegacy(): Lamina Maestra clasica.
+  * composeDesigned(): composicion personalizada.
+
+- public/ui/LayoutEditor.js
+  Editor visual para seleccionar modo clasico o personalizado y modificar QR/marco.
+
+- public/css/layout-editor.css
+  Estilos y comportamiento visual de la interfaz de maquetacion.
+
+- public/core/MindARManager.js
+  Compila el target, mide contraste/features y gestiona el tracking de imagen.
+
+- public/core/ParallaxEngine.js
+  Renderiza el video mediante Three.js y utiliza contentRect para alinearlo sobre
+  la zona de obra dentro de la composicion impresa.
+
+- public/services/ProjectStore.js
+  Google OAuth, Supabase Database, Storage, lectura/escritura de publicaciones.
+
+- public/utils/QRGenerator.js
+  Generacion del codigo QR mediante qrcode 1.5.4.
+
+- Vercel
+  Hosting y despliegue automatico desde master.
+
+- Supabase
+  Autenticacion, base de datos y almacenamiento de cover.jpg, animation.mp4 y
+  target.mind.
 
 
-3. EVOLUCION CRONOLOGICA DE LAS IMPLEMENTACIONES
-------------------------------------------------
-
-ETAPA ACTUAL - PRUEBA PUBLICA E HISTORIAL DEL AUTOR
-
-- Se incorporo una tarjeta publica "Descargar imagen de prueba" con miniatura
-  optimizada y descarga directa de una Lamina Maestra PDF lista para probar.
-- El panel autenticado ahora incluye "Mis trabajos", con miniatura, titulo, fecha,
-  acceso directo y regeneracion descargable de la Lamina Maestra de cada proyecto.
-- Se agrego eliminacion confirmada por dialogo. La operacion valida la sesion y el
-  author_id, elimina cover.jpg, animation.mp4 y target.mind de Storage y finalmente
-  elimina la fila de stories.
-- La grilla refleja de inmediato la eliminacion e incluye estados de carga, vacio
-  y error sin bloquear el flujo de creacion.
-- Las politicas RLS existentes ya limitan DELETE al autor autenticado y la consulta
-  del historial aplica ademas un filtro explicito por el usuario activo.
-
-ETAPA 1 - BASE DEL REPOSITORIO
-
-- Se inicializo la aplicacion y se ordeno la estructura publica en public/.
-- Se establecio Vercel como entorno de produccion.
-- Se modularizaron las responsabilidades en core/, ui/, utils/ y services/.
-
-Commit de referencia:
-- bc407c4 - initialize commit
-
-ETAPA 2 - CORRECCION DE CARGA DE IMAGEN EN MOVILES
-
-Problema observado en produccion:
-- Una imagen de 2.96 MB disparaba "Archivo muy grande".
-- La interfaz quedaba negra y solo mostraba el boton "3D Depth".
-
-Solucion aplicada:
-- El limite de entrada se amplio a 25 MB.
-- La imagen se redimensiona en el navegador hasta 1920 px y se comprime como JPEG
-  con calidad aproximada de 0.82 antes de procesarse o subirse.
-- Los errores se muestran dentro de la interfaz sin destruir la escena previa.
-- Se agrego un flujo demo seguro cuando todavia no existe un archivo .mind.
-
-Commit de referencia:
-- ede728a - fix mobile image upload and parallax demo flow
-
-ETAPA 3 - RENDER THREE.JS Y BUCLE DE ANIMACION
-
-- La ilustracion subida se carga como textura de un plano Three.js.
-- Se garantiza el inicio del bucle requestAnimationFrame despues de la carga.
-- Se corrigieron estados que dejaban el canvas congelado o cubierto por overlays.
-- Se adapto el render al cambio de orientacion y tamano de pantalla.
-
-Commit de referencia:
-- b08899e - render uploaded image with Three.js parallax
-
-ETAPA 4 - MOTOR DE PROFUNDIDAD Y ANIMACION "LIBROS VIVOS"
-
-- El plano se subdividio para permitir desplazamiento de malla y UV.
-- Se incorporo un shader que estima relieve a partir de luminancia y gradientes de
-  la ilustracion, logrando un efecto 2.5D mas rico que mover la foto completa.
-- Se agrego un ciclo procedural de cinco segundos con respiracion/zoom organico,
-  destellos y particulas sutiles.
-- Se creo la vista previa de producto con controles para alternar entre el efecto
-  3D y la camara.
-
-Commit de referencia:
-- c0fff74 - build automatic living-book AR preview
-
-ETAPA 5 - WORLD-LOCKING CON MINDAR
-
-Problema anterior:
-- DeviceMotion controlaba el movimiento principal y la imagen parecia flotar o
-  temblar al inclinar el telefono.
-
-Solucion aplicada:
-- Se deshabilito el giroscopio como controlador principal de la malla.
-- El contenido se conecta al anchor de MindAR.
-- targetFound hace visible y activa el contenido sobre el marcador.
-- targetLost actualiza el estado y oculta suavemente la experiencia.
-- El shader conserva la profundidad usando la relacion entre camara y objeto
-  detectado, mientras la posicion espacial proviene del tracking de imagen.
-
-Commit de referencia:
-- 1c1156a - anchor living-book effects to MindAR targets
-
-ETAPA 6 - DIAGNOSTICO Y TOLERANCIA DE TRACKING
-
-- Se agregaron estados visuales de compilacion, escaneo, target detectado y target
-  perdido, con texto y color visibles en la pantalla del lector.
-- La imagen se analiza por contraste, bordes y cantidad de detalles utiles.
-- Si el target es debil, el autor recibe un mensaje explicativo en lugar de una
-  falla silenciosa.
-- Se ajustaron parametros de camara y tracking para tolerar mejor cambios de luz,
-  distancia y pequenas perdidas temporales del marcador.
-
-Commit de referencia:
-- 1de854c - add MindAR tracking diagnostics and tolerance
-
-ETAPA 7 - ROLES, RUTAS Y PERSISTENCIA
-
-Se separaron dos experiencias:
-
-- /crear: panel del autor para autenticarse, subir, compilar, guardar y publicar.
-- /ver/:id: lector minimalista, sin controles de edicion, dedicado a la camara y
-  al reconocimiento del cuento indicado por el ID.
-
-Tambien se incorporaron:
-
-- Redireccion de la raiz hacia /crear.
-- Rewrites en server.js y vercel.json para soportar rutas directas.
-- Generacion de UUID para cada cuento.
-- Guardado de imagen procesada, target .mind y configuracion visual.
-- Carga del cuento por ID desde la ruta publica.
-
-Commit de referencia:
-- 69293fe - separate author and reader routes with persistent AR stories
-
-ETAPA 8 - SUPABASE
-
-- Se creo el proyecto Supabase de InkMotion en la region sa-east-1.
-- Se configuro autenticacion por Google OAuth con flujo PKCE.
-- Site URL: https://ink-motion-pied.vercel.app
-- Redirect URL: https://ink-motion-pied.vercel.app/crear
-- Se creo la tabla stories con UUID, autor, titulo, rutas de imagen/target,
-  configuracion 3D y fecha de creacion.
-- Se creo el bucket stories.
-- Se aplicaron politicas RLS: lectura publica de cuentos publicados y escritura
-  limitada al autor autenticado.
-- La clave publica del cliente puede usarse en el navegador gracias a RLS; nunca
-  se debe exponer una service role key.
-
-La compilacion del target se realiza una sola vez en el panel del autor. El lector
-descarga el .mind ya generado, reduciendo espera y consumo en cada apertura.
-
-ETAPA 9 - CARGADOR RESILIENTE DEL COMPILADOR MINDAR
-
-Problema observado:
-- /crear mostraba "No se pudo cargar el compilador MindAR".
-- El build de MindAR era tratado como script clasico aunque el recurso era ESM, o
-  la CDN podia demorar/fallar antes de exponer MINDAR.IMAGE.Compiler.
-
-Solucion aplicada:
-- Se creo un cargador dinamico que prueba fuentes compatibles de jsDelivr, esm.sh
-  y unpkg.
-- Se valida expresamente que el namespace del compilador este disponible.
-- Mientras conecta, la UI muestra "Conectando con el motor AR...".
-- Una demora externa ya no se convierte inmediatamente en un error definitivo.
-
-Commit de referencia:
-- 1a33234 - fix resilient MindAR compiler loading
-
-ETAPA 10 - LAMINA MAESTRA PARA PUBLICACION IMPRESA
-
-- El panel /crear integra automaticamente el QR dentro de la Lamina Maestra.
-- El QR apunta a la ruta corta https://ink-motion-pied.vercel.app/v/{id-compacto}.
-- Se usa qrcode 1.5.4 cargado en el cliente con fallback de CDN.
-- El codigo utiliza correccion Level M y bloques mas grandes para lectura impresa.
-- Titulo, QR y elementos tecnicos quedan fuera de la ilustracion, sobre paspartu.
-- La descarga entrega un unico archivo InkMotion_Lamina_Final.pdf a 300 DPI.
-- Si la composicion, el QR o el target fallan, la publicacion se detiene y ofrece reintento.
-
-Esta funcionalidad se incorpora en la version publicada junto con este registro.
-
-
-4. FLUJO ACTUAL DEL AUTOR
+3. FLUJO ACTUAL DEL AUTOR
 -------------------------
 
-1) Abre /crear.
-2) Inicia sesion con Google mediante Supabase Auth.
-3) Selecciona una imagen de hasta 25 MB.
-4) InkMotion optimiza la imagen y compone la Lamina Maestra adaptativa.
-5) El compilador MindAR crea el archivo .mind desde la lamina completa.
-6) Se suben la imagen y el target al bucket stories.
-7) Se inserta el registro de la obra en la tabla stories.
-8) La interfaz devuelve el enlace publico corto /v/:id.
-9) El autor descarga la Lamina Maestra completa como PDF para imprenta.
+1) El autor abre /crear.
+2) Inicia sesion mediante Google OAuth/Supabase.
+3) Sube una imagen JPG, PNG o WebP de hasta 25 MB.
+4) InkMotion optimiza la imagen para el flujo web.
+5) Sube un video MP4 de 3 a 10 segundos y hasta 15 MB.
+6) Se valida que imagen y video tengan proporciones compatibles.
+7) El autor elige el modo de impresion:
+   - Clasico · recomendado.
+   - Personalizar diseño.
+8) InkMotion compone la pieza final.
+9) MindAR compila esa composicion completa como target.mind.
+10) Se genera el PDF final a 300 DPI.
+11) Se suben cover.jpg, animation.mp4 y target.mind.
+12) Se inserta o conserva la configuracion dentro de stories.config.
+13) El autor recibe la URL publica corta /v/:id y puede descargar la lamina.
 
 
-5. FLUJO ACTUAL DEL LECTOR
+4. FLUJO ACTUAL DEL LECTOR
 --------------------------
 
-1) Escanea el QR o abre /v/:id; /ver/:uuid se conserva por compatibilidad.
-2) InkMotion consulta la obra por ID.
-3) Descarga la ilustracion y el target .mind ya compilado.
+1) El lector escanea el QR o abre /v/:id.
+2) InkMotion consulta el proyecto en Supabase.
+3) Descarga imagen, video y target.mind.
 4) Solicita permiso de camara.
-5) Muestra una guia animada mientras busca la lamina completa.
-6) Cuando MindAR detecta el target, la escena queda anclada al papel.
-7) Three.js activa "La obra cobro vida": relieve, barrido y particulas.
-8) Una tolerancia de 400 ms absorbe perdidas minimas antes de desvanecer.
+5) MindAR procesa la camara y busca el target completo.
+6) Cuando detecta la pieza impresa, ParallaxEngine posiciona el video sobre la zona
+   definida por contentRect.
+7) El video se reproduce en loop mientras el target permanece visible.
+8) Al perder el target, se aplica tolerancia y transicion antes de ocultar/pausar.
+9) En navegadores compatibles, el lector puede activar sonido y grabar localmente.
 
 
-6. ARCHIVOS PRINCIPALES
+5. LAMINA MAESTRA CLASICA
+-------------------------
+
+El modo clasico vuelve a ser el comportamiento predeterminado y recomendado.
+
+Caracteristicas:
+
+- respeta la proporcion real de la obra;
+- agrega paspartu exterior;
+- mantiene marco tecnico de alto contraste;
+- conserva cuatro esquinas fiduciales en L;
+- mantiene QR fuera de la ilustracion;
+- incorpora banda inferior con branding/titulo;
+- exporta PDF a 300 DPI;
+- compila la lamina completa como target MindAR.
+
+Cambio importante de agosto 2026:
+
+La vista previa del modo clasico ya no intenta imitar la lamina mediante overlays
+CSS. Usa directamente MasterSheetGenerator.composeLegacy(), el mismo generador de
+la salida final. El objetivo es que "lo que se ve" coincida con "lo que se imprime".
+
+Este ajuste se realizo despues de detectar visualmente que una preview simulada
+podía desplazar marco y QR respecto de la composicion final.
+
+
+6. EDITOR DE DISEÑO / LAYOUT STUDIO
+-----------------------------------
+
+Se incorpora una segunda etapa de producto orientada a maquetacion para soportes
+fisicos reales.
+
+El editor ofrece dos modos:
+
+A) CLASICO · RECOMENDADO
+
+- activo por defecto;
+- usa composeLegacy();
+- controles personalizados desactivados;
+- pensado como camino seguro y probado para WebAR.
+
+B) PERSONALIZAR DISEÑO
+
+Permite:
+
+- mover el QR dentro de la obra;
+- usar QR dentro o fuera de la imagen;
+- escalar el QR proporcionalmente;
+- posiciones rapidas en cuatro esquinas;
+- fondo blanco, suave o sin fondo adicional;
+- seleccionar estilos de marco visual;
+- cambiar color y grosor;
+- adaptar el color del marco a la obra.
+
+Los valores de posicion y tamano se almacenan de forma normalizada para no quedar
+atados a una resolucion concreta.
+
+Ejemplo conceptual de layout:
+
+layout = {
+  page: {
+    mode: 'artwork'
+  },
+  qr: {
+    placement: 'inside',
+    x: 0.80,
+    y: 0.80,
+    scale: 0.13,
+    background: 'white'
+  },
+  frame: {
+    preset: 'minimal',
+    color: '#17171f',
+    width: 0.006,
+    autoColor: false
+  }
+}
+
+
+7. SEGURIDAD DEL TRACKING Y MARCOS
+---------------------------------
+
+El marco decorativo y la robustez tecnica del tracking se consideran conceptos
+separados.
+
+Problema a evitar:
+
+Un usuario no debe poder elegir un marco esteticamente agradable que reduzca tanto
+el contraste o los puntos de seguimiento que la experiencia WebAR deje de funcionar.
+
+Reglas actuales:
+
+- el modo clasico conserva su marco/fiduciales historicos;
+- el modo personalizado utiliza limites minimos de grosor;
+- InkMotion conserva referencias tecnicas de alto contraste cuando corresponde;
+- MindAR analiza la pieza final y no solo la imagen original;
+- la compilacion evalua contraste, edge ratio y cantidad de features;
+- targets con pocas features son rechazados o clasificados como limitados.
+
+La pieza final compuesta se transforma en target.mind. Por lo tanto, QR, marco y
+maquetacion forman parte del patron que realmente reconoce la camara.
+
+
+8. QR Y CORRECCIONES DE UI
+--------------------------
+
+Durante la primera implementacion del editor se detectaron dos problemas:
+
+1) El slider de tamaño del QR cambiaba el valor interno pero visualmente el QR no
+   parecia cambiar.
+
+Causa:
+- una regla CSS forzaba el ancho del QR exterior y un min-width interferia con la
+  escala visual.
+
+Solucion:
+- se retiraron esas restricciones y el tamaño vuelve a depender del layout.
+
+2) La vista previa aparecia vacia o con icono de imagen rota.
+
+Causa:
+- el editor duplicaba la imagen del flujo principal en otro elemento visual de
+  manera fragil.
+
+Solucion:
+- la preview personalizada toma la imagen real ya procesada por InkMotion y la
+  dibuja sobre canvas.
+- el QR y el marco se posicionan sobre esa misma zona de obra.
+- el modo clasico usa directamente composeLegacy().
+
+
+9. COMPATIBILIDAD CON TRABAJOS EXISTENTES
+-----------------------------------------
+
+La introduccion del Layout Studio se hizo sin una migracion destructiva.
+
+- No se borraron proyectos existentes.
+- No se requiere republicar los trabajos actuales.
+- No fue necesario crear una columna nueva en Supabase.
+- stories.config ya existia como JSON y se reutiliza.
+- Los proyectos anteriores que no contienen config.layout usan el formato clasico.
+- Los proyectos nuevos pueden almacenar config.layout.
+- Mis trabajos puede regenerar una composicion nueva usando la configuracion del
+  proyecto cuando esta disponible.
+
+Esta compatibilidad hacia atras es un requisito permanente del producto.
+
+
+10. PERSISTENCIA ACTUAL
 -----------------------
 
-- public/index.html: estructura de /crear, /v/:id y /ver/:id.
-- public/app.js: routing, estados de UI y coordinacion del flujo completo.
-- public/core/ImageProcessor.js: validacion, analisis y compresion de imagenes.
-- public/core/MasterSheetGenerator.js: composicion adaptativa y PDF de imprenta.
-- public/core/MindARLoader.js: carga robusta del runtime/compilador MindAR.
-- public/core/MindARManager.js: ciclo de camara, anchors y eventos de tracking.
-- public/core/ParallaxEngine.js: escena Three.js, shader, profundidad y animacion.
-- public/services/ProjectStore.js: autenticacion y persistencia con Supabase.
-- public/utils/QRGenerator.js: generacion del QR Level M integrado en la lamina.
-- public/css/routes.css: estilos responsivos de autor, lector, publicacion y QR.
-- server.js y vercel.json: entrega de estaticos y rewrites de rutas.
-- supabase/migrations/: esquema, bucket y politicas de seguridad.
+Cada proyecto puede contener:
+
+Storage:
+- cover.jpg
+- animation.mp4
+- target.mind
+
+Database (stories):
+- id
+- author_id
+- title
+- image_path
+- video_path
+- target_path
+- config
+- created_at
+
+Config contiene parametros como:
+
+- animation;
+- loopSeconds;
+- anchor;
+- contentRect;
+- sheetDpi;
+- layout (solamente cuando corresponde).
+
+El lector utiliza contentRect para separar el area del target total del area donde
+realmente debe aparecer el video.
 
 
-7. VALIDACIONES REALIZADAS
---------------------------
+11. VALIDACIONES DE VIDEO
+-------------------------
 
-- Comprobacion de sintaxis de los modulos JavaScript modificados.
-- Auditoria de IDs usados por app.js contra los elementos presentes en el HTML.
-- Comprobacion de IDs HTML duplicados.
-- Verificacion del flujo de error para no dejar la pantalla negra.
-- Verificacion de rutas /crear y /ver/:id en Vercel.
-- Revision de politicas RLS y avisos de seguridad de Supabase.
-- Verificacion de que el QR usa la URL publica corta y queda integrado en el PDF.
-
-Cada despliegue debe cerrarse con una prueba real en celular porque permisos de
-camara, calidad optica, iluminacion y navegador no se reproducen completamente en
-una prueba de escritorio.
+Formato: MP4
+Codec recomendado: H.264
+Duracion: 3 a 10 segundos
+Peso maximo: 15 MB
+Resolucion maxima recomendada: 1920 px por lado
+Proporcion: debe coincidir con la imagen dentro de la tolerancia establecida
+Audio: opcional
+Reproduccion: loop mientras el target permanece visible
 
 
-8. PRUEBAS RECOMENDADAS DESPUES DE ESTE DESPLIEGUE
---------------------------------------------------
+12. CAPTURA Y COMPARTIR
+-----------------------
 
-1) Abrir /crear y completar el inicio con Google.
-2) Publicar una imagen con buen contraste y detalles no repetitivos.
-3) Confirmar que aparece el enlace publico y la vista de la Lamina Maestra.
-4) Descargar el PDF y escanearlo desde otro telefono.
-5) Abrir /v/:id, habilitar camara y apuntar a la lamina completa.
-6) Comprobar los estados "escaneando", "detectado" y "target perdido".
-7) Mover el telefono alrededor de la pagina: el contenido debe permanecer anclado.
-8) Repetir con poca luz y a varias distancias.
+El lector puede grabar voluntariamente la experiencia en navegadores compatibles.
 
+- La grabacion comienza solamente al pulsar el boton rojo.
+- Combina camara y capa AR.
+- No se sube automaticamente a InkMotion.
+- Se procesa localmente.
+- Puede descargarse.
+- Puede utilizar Web Share si el navegador permite compartir archivos.
+- Compartir y descargar son acciones independientes.
 
-9. PROXIMOS PASOS POSIBLES
---------------------------
-
-- Panel con listado, edicion, despublicacion y borrado de obras del autor.
-- Metricas anonimas de aperturas, detecciones y tiempo de experiencia.
-- Mapas de profundidad de mayor calidad generados por un servicio dedicado.
-- Plantillas de animacion seleccionables por tipo de obra.
-- Guia de impresion con tamano minimo, zona silenciosa y prueba del QR.
-- Branding por editorial, organizaciones, equipos y ficha informativa de la obra.
-- Pruebas automatizadas end-to-end y matriz de navegadores moviles.
-- Estrategia de cache/PWA para mejorar aperturas con conectividad limitada.
+Se corrigio el comportamiento historico donde Compartir podia terminar ejecutando
+una descarga en lugar de abrir el menu nativo.
 
 
-10. HISTORIAL DE COMMITS PRINCIPALES
-------------------------------------
+13. COMPATIBILIDAD iOS
+----------------------
 
+Se implementaron medidas especificas para WebKit:
+
+- video AR presente de forma compatible en DOM;
+- espera de fotograma decodificado antes de usar VideoTexture;
+- intento de reproduccion silenciosa anticipada;
+- desbloqueo de reproduccion mediante interaccion del usuario;
+- mensajes de fallback recomendando MP4 H.264 y SDR.
+
+La compatibilidad iPhone debe seguir probandose fisicamente porque Chrome en iOS
+utiliza igualmente WebKit.
+
+
+14. EVOLUCION CRONOLOGICA RESUMIDA
+----------------------------------
+
+ETAPA 1 - Base del repositorio
+- Estructura public/, core/, ui/, utils/, services/.
+- Vercel como produccion.
+
+ETAPA 2 - Carga de imagen en moviles
+- Limite 25 MB.
+- Redimensionado y compresion previa.
+
+ETAPA 3 - Render Three.js
+- Textura de la ilustracion y bucle de render estable.
+
+ETAPA 4 - Primer motor 2.5D
+- Shader, profundidad procedural, respiracion y particulas.
+
+ETAPA 5 - World locking MindAR
+- Tracking pasa a gobernar la posicion espacial.
+
+ETAPA 6 - Diagnostico de tracking
+- Contraste, bordes, features, estados de scan y target.
+
+ETAPA 7 - Roles y rutas
+- /crear para autor.
+- /v/:id y compatibilidad /ver/:id para lector.
+
+ETAPA 8 - Supabase
+- Auth Google.
+- Database, Storage y RLS.
+
+ETAPA 9 - Cargador MindAR resiliente
+- Fallbacks de CDN y errores mas claros.
+
+ETAPA 10 - Lamina Maestra
+- QR corto, PDF, paspartu, fiduciales y target completo.
+
+ETAPA 11 - Lamina adaptativa
+- Respeta proporciones cuadradas, horizontales y verticales.
+
+ETAPA 12 - Profundidad IA experimental
+- Replicate/Depth Anything fue probado y posteriormente retirado del flujo activo.
+
+ETAPA 13 - Cambio a Video AR
+- Se establece imagen + video como flujo unico.
+- Three.VideoTexture reemplaza la profundidad IA como experiencia principal.
+
+ETAPA 14 - Video 3-10 segundos
+- Compatibilidad ampliada con herramientas de imagen-a-video.
+
+ETAPA 15 - Prompt universal
+- Instrucciones genericas para mantener camara, encuadre y composicion.
+
+ETAPA 16 - Feedback de publicacion
+- Metadata, estados monotónicos y validacion de aspect ratio.
+
+ETAPA 17 - Grabacion local
+- Grabacion voluntaria, sonido opcional y almacenamiento local.
+
+ETAPA 18 - Compatibilidad iPhone
+- Mejoras de reproduccion y desbloqueo WebKit.
+
+ETAPA 19 - Compartir nativo
+- Separacion real entre compartir y descargar.
+
+ETAPA 20 - Mis trabajos y prueba publica
+- Biblioteca personal, descarga, borrado y Lamina de prueba publica.
+
+ETAPA 21 - Layout Studio / maquetacion
+- Pagos pausados temporalmente.
+- Clásico como comportamiento predeterminado.
+- Personalizacion opt-in.
+- QR integrado.
+- Marcos visuales.
+- Persistencia de layout.
+- Compatibilidad con proyectos anteriores.
+
+ETAPA 22 - Preview WYSIWYG corregida
+- Se abandona la simulacion del modo clasico mediante CSS.
+- El modo clasico se previsualiza con composeLegacy().
+- El modo personalizado usa la imagen real procesada y overlays coordinados.
+
+
+15. DECISIONES DE PRODUCTO VIGENTES
+-----------------------------------
+
+- El flujo activo es exclusivamente imagen + video.
+- El maximo del video es 10 segundos.
+- El video reproduce en loop automaticamente.
+- El audio es opcional y requiere interaccion del lector cuando el navegador lo exige.
+- El modo clasico es el default.
+- El editor personalizado es opcional.
+- Los pagos no son prioridad inmediata del MVP.
+- El objetivo de corto plazo es resolver casos reales de impresion y maquetacion.
+- El visor AR debe cambiar lo minimo posible frente a cambios de diseño fisico.
+- Los proyectos viejos deben seguir funcionando.
+
+
+16. PRUEBAS OBLIGATORIAS PARA CAMBIOS DE LAYOUT
+-----------------------------------------------
+
+1) Subir una obra cuadrada.
+2) Subir una obra vertical.
+3) Subir una obra horizontal.
+4) Verificar que Clasico coincide con el PDF final.
+5) Probar Personalizar diseño.
+6) Mover el QR a las cuatro esquinas.
+7) Cambiar su escala entre los valores permitidos.
+8) Validar lectura del QR impreso.
+9) Cambiar cada preset de marco.
+10) Confirmar que MindAR puede compilar el target resultante.
+11) Probar targetFound/targetLost en telefono real.
+12) Repetir con distintas luces y distancias.
+13) Regenerar un proyecto antiguo.
+14) Confirmar que sigue utilizando el formato clasico.
+15) Regenerar un proyecto nuevo con layout y confirmar que mantiene su diseño.
+
+
+17. PROXIMOS PASOS
+------------------
+
+- Refinar el editor personalizado a partir de pruebas impresas reales.
+- Incorporar presets orientados a libro, menu, packaging y manual tecnico.
+- Mejorar analisis automatico de contraste entre marco, obra y QR.
+- Incorporar recomendaciones de tamaño fisico minimo del QR segun impresion.
+- Probar materiales y superficies diferentes a papel mate.
+- Realizar matriz de pruebas Android/iOS.
+- Mejorar pruebas automatizadas de regresion del generador de laminas.
+- Retomar monetizacion/pagos una vez estabilizada la capa editorial del MVP.
+
+
+18. COMMITS / HITOS DE REFERENCIA
+---------------------------------
+
+Hitos historicos:
 - bc407c4  initialize commit
 - ede728a  fix mobile image upload and parallax demo flow
 - b08899e  render uploaded image with Three.js parallax
@@ -302,105 +492,30 @@ una prueba de escritorio.
 - 69293fe  separate author and reader routes with persistent AR stories
 - 1a33234  fix resilient MindAR compiler loading
 - e2c2d8b  polish master sheet and AR reveal experience
-- Version actual: Lamina Maestra adaptativa y activacion visual de Obra Viva.
+- b59c0bdf  experimental semantic depth integration milestone
+
+Hitos recientes del Layout Studio:
+- 64b9501  add artwork layout editor
+- bc18b92  introduce designed sheet generation
+- 03c04d7  integrate layout editor into author flow
+- 30caf41  restore classic mode as default
+- 5332624  protect tracking-oriented layout rules
+- 7208734  rebuild preview from uploaded artwork
+- dd79d17  use real legacy sheet for classic preview
+- 6e44171  align layout editor styles with final composition
 
 
-NOTAS DE MANTENIMIENTO
-----------------------
+19. NOTAS DE MANTENIMIENTO
+-------------------------
 
-- La rama productiva del repositorio es master.
-- Los cambios en master disparan el despliegue automatico de Vercel.
-- No guardar claves privadas, service role keys ni credenciales en este archivo.
-- Conservar este documento actualizado en cada cambio funcional importante.
+- master es la rama productiva.
+- Los cambios en master disparan despliegue automatico en Vercel.
+- No guardar service role keys ni secretos en el repositorio.
+- Las claves publicas del cliente deben seguir protegidas mediante RLS.
+- Antes de modificar el layout, revisar MasterSheetGenerator y contentRect.
+- Nunca asumir que una preview CSS equivale al PDF final.
+- La salida impresa debe ser la fuente de verdad para el target AR.
+- Conservar compatibilidad con proyectos que no contienen config.layout.
+- Cerrar cada cambio importante con una prueba real en dispositivo movil.
 
 FIN DEL REGISTRO
-2026-08-19 — Lámina Maestra InkMotion
-- La exportación final ahora compone una hoja A4 de 2480 × 3508 px a 300 DPI con ilustración central, marco geométrico de alto contraste y QR de acceso.
-- El UUID y la URL pública se reservan antes de publicar para integrar el QR real en la lámina.
-- MindAR compila la lámina completa como target; la configuración conserva el rectángulo de la ilustración para alinear el efecto 2.5D dentro del marco.
-- Se integró generación de profundidad con IA mediante Replicate Depth Anything V2 y una Supabase Edge Function autenticada. El mapa generado se guarda junto a la obra y Three.js lo utiliza sin alterar los colores originales; se mantiene el relieve local como fallback para la demo.
-- El autor recibe un único archivo InkMotion_Lamina_Final.pdf y una vista previa de la lámina publicada.
-2026-08-19 — Firma del creador
-- Se añadió un footer global y adaptable con la firma “Creado por Lic. Lucas Walter González” y enlace seguro a su perfil de LinkedIn.
-2026-08-19 — Lámina Maestra de proporción dinámica
-- El Canvas ahora lee las dimensiones reales de cada ilustración y conserva su proporción en la lámina, el marco AR y el PDF de imprenta.
-- Resolución, márgenes, trazos, tipografía y QR escalan según el lado menor de la obra; el PDF usa un tamaño de página personalizado a 300 DPI.
-2026-08-19 — Fiduciales de perspectiva y QR simplificado
-- El marco usa una zona blanca perimetral, grosor negro equivalente al 4% del ancho y cuatro esquinas interiores sólidas en L para reforzar la homografía.
-- Las nuevas láminas codifican una ruta /v/ con el UUID compactado de 36 a 22 caracteres y QR Level M; /ver/:uuid se conserva para compatibilidad.
-2026-08-19 — Corrección crítica del input de cámara MindAR
-- Se sincronizan video.width/video.height con video.videoWidth/video.videoHeight antes de crear el Controller, igual que en el wrapper oficial de MindAR 1.2.5. El detector ya recibe frames con las dimensiones reales.
-- Se fija interestedTargetIndex = 0, se valida que el .mind tenga un único target y se registran targetFound, targetLost, actividad del bucle, errores asíncronos y pérdida/restauración de WebGL.
-2026-08-19 — Terminología visual más amplia
-- La interfaz conserva “Subir ilustración” y reemplaza las referencias visibles a “cuento/libro” por “obra”, para incluir arte visual, cómics, portadas e ilustración editorial.
-2026-08-19 — Paspartú técnico y estabilización AR
-- La Lámina Maestra amplía el lienzo con un paspartú neutro; marco, fiduciales, texto y QR quedan fuera de la ilustración y escalan con sus proporciones reales.
-- El anclaje Three.js interpola posición, rotación y escala con suavizado independiente de FPS para reducir el jitter sin desfasar la experiencia.
-- Las partículas conservan AdditiveBlending, se elevan sobre el relieve y se renderizan sin prueba de profundidad para evitar que desaparezcan dentro de la obra.
-2026-08-19 — Activación visual “La obra cobró vida”
-- La detección despliega progresivamente relieve, escala, brillo y partículas, con un barrido violeta dentro del shader y respuesta háptica breve cuando el dispositivo la admite.
-- El lector suma una guía animada de encuadre y tolera pérdidas de tracking de 400 ms antes de iniciar un desvanecimiento, evitando cortes bruscos por microtemblores.
-- El target .mind inmutable ahora aprovecha la caché del navegador para acelerar aperturas repetidas.
-2026-08-20 — Corrección cromática y relieve neutro
-- Se eliminó la suma violeta del shader y el plano decorativo sobredimensionado que teñían la tinta oscura y los bordes de la obra.
-- El relieve usa un height field no negativo obtenido de luminancia Rec. 709 y gradientes de luminancia: la tinta oscura permanece en el papel y las zonas claras o de borde se elevan.
-- El color se muestrea sin desplazamiento UV, el sombreado es multiplicativo y acromático, y una máscara perimetral suave evita sangrado de la textura fuera de la ilustración.
-- La banda informativa de la Lámina Maestra reserva ahora su propia altura debajo del marco: título y QR quedan completamente separados de la línea y de los fiduciales inferiores.
-2026-08-20 — Profundidad semántica con IA en producción
-- Se incorporó la Edge Function autenticada `generate-depth`, desplegada en el proyecto Supabase `inkmotion` y protegida por JWT.
-- La función usa una versión fija de Replicate Depth Anything V2, descarga el resultado antes de que expire y lo guarda como `depth.png` dentro de la carpeta de la obra.
-- `REPLICATE_API_TOKEN` quedó configurado como secreto del backend; no forma parte del repositorio ni del JavaScript público.
-- `ProjectStore` solicita la generación después de publicar y registra `depthPath`, `depthModel` y `depthStatus` dentro de la configuración de la obra.
-- `ParallaxEngine` carga el mapa IA sin espacio de color, lo usa para desplazar la geometría y mantiene la luminancia local como fallback si el servicio externo falla.
-- La integración conserva la publicación aunque Replicate no responda, evitando que una dependencia externa arruine la demo.
-- El cambio fue fusionado mediante el PR #1, commit productivo `b59c0bdf19bff846604806e46a8faf73314b2a78`, con despliegue Vercel verificado correctamente.
-- Se verificó en producción que `app.js` contiene la nueva integración y que la Edge Function rechaza solicitudes sin cabecera de autorización.
-2026-08-20 — InkMotion Video AR: flujo único imagen + video
-
-- Se reemplazó el flujo de relieve 2.5D por una única experiencia de imagen más video loop.
-- El autor debe cargar una imagen y un MP4 de 3 a 8 segundos, hasta 15 MB y con la misma proporción.
-- Se retiró la invocación a Replicate del proceso de publicación, eliminando su coste y espera del flujo activo.
-- Supabase incorpora `video_path`, permite `animation.mp4` dentro de la carpeta protegida del autor y amplía el bucket a 15 MB.
-- El visor usa `THREE.VideoTexture`: reproduce al encontrar el target, pausa al perderlo y mantiene el video anclado mediante MindAR.
-- La activación añade un despegue sutil con elevación Z, escala aproximada del 2,8 %, sombra y fundido perimetral.
-- Se añadió un mini tutorial de tres pasos y un prompt copiable para generar loops con cámara fija.
-- Las publicaciones del esquema anterior se conservan, pero el visor solicita republicarlas con su video loop.
-2026-08-21 — Compatibilidad ampliada con Google Veo
-
-- El máximo de duración del video se amplió de 8 a 10 segundos; se recomiendan 8 segundos por ser el formato más compatible entre las variantes actuales de Veo.
-- El mini tutorial aclara que Veo funciona de forma más predecible con imágenes 16:9 o 9:16.
-- El prompt copiable fue reemplazado por una versión restrictiva en inglés que bloquea cámara, encuadre, proporción, composición, paleta y elementos de la imagen original.
-2026-08-21 — Prompt universal para herramientas de imagen a video
-
-- Se reemplazó el prompt específico para Veo por una versión genérica compatible con distintas herramientas de imagen a video.
-- El nuevo prompt preserva zonas estáticas, cámara, composición, proporción, textos y geometría, y limita el movimiento a microanimaciones localizadas.
-- El tutorial recomienda usar la misma imagen como fotograma inicial y final cuando el generador lo permita.
-2026-08-21 — Claridad y feedback del flujo dual
-
-- La vista previa separa y etiqueta la imagen que se imprimirá y el video que aparecerá en AR.
-- Cada archivo muestra nombre, resolución, peso y, en el video, duración; se mantiene una advertencia breve para revisar encuadre y cámara fija sin agregar pasos obligatorios.
-- La barra de publicación avanza de forma monotónica por composición, compilación, PDF, subidas y registro final.
-- La calidad calculada por MindAR se comunica como tracking fuerte o aceptable durante la generación.
-- Se retiró HEIC de los formatos anunciados hasta contar con conversión compatible entre navegadores, y se aclara que el audio del MP4 no se reproduce.
-2026-08-21 — Grabación local y sonido opcional
-
-- El lector incorpora un botón rojo opcional que graba cámara y Canvas AR únicamente después de ser pulsado y continúa hasta que la persona lo detiene.
-- La captura se procesa localmente, no se almacena en Supabase y ofrece descarga o uso de Web Share cuando el navegador lo permite.
-- Un control independiente activa o silencia la pista de audio del MP4 mediante una interacción explícita, evitando bloqueos de autoplay.
-- La grabación selecciona automáticamente MP4 o WebM según las capacidades del dispositivo y se oculta sin afectar el AR cuando MediaRecorder no está disponible.
-2026-08-21 — Tutorial con responsabilidades claras
-
-- La guía distingue la preparación externa de la imagen y el video de las funciones realizadas automáticamente por InkMotion.
-- “Prompt universal” se reemplaza por “instrucciones para crear el video loop” y se explica dónde pegarlas y para qué sirven.
-- El tercer paso detalla el valor propio de InkMotion: validar los archivos y generar lámina, QR y experiencia AR.
-2026-08-21 — Reproducción AR compatible con iPhone
-
-- El video AR se incorpora de forma invisible al DOM y espera un fotograma decodificado antes de crear la textura de Three.js, evitando texturas negras en WebKit.
-- Se intenta la reproducción silenciosa anticipada y se añade un desbloqueo mediante el primer toque para cumplir las restricciones de reproducción de Safari y Chrome en iOS.
-- Los errores de decodificación indican exportar MP4 H.264, audio AAC y color SDR, sin modificar la lógica de tracking de MindAR.
-- El título general pasa de “Libros Vivos” a “Obras que cobran vida” para representar todo tipo de obra visual.
-2026-08-21 — Compartir y descargar como acciones independientes
-
-- El botón Compartir deja de ejecutar una descarga automática cuando Web Share falla o el usuario cancela el menú.
-- El archivo compartido normaliza su MIME a `video/mp4` o `video/webm`, evitando que iOS rechace tipos extendidos con parámetros de códec.
-- El menú nativo recibe solamente el archivo para maximizar compatibilidad y la interfaz informa el error sin sustituir silenciosamente la acción elegida.
