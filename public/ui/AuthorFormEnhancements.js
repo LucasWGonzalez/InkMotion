@@ -46,35 +46,52 @@ function titleReady() {
   return Boolean(el('story-title')?.value?.trim());
 }
 
-function publishing() {
-  return el('build-status')?.dataset.state === 'processing';
-}
-
 function syncPublishButton() {
   const button = el('btn-publish');
   const title = el('story-title');
   if (!button || !title) return;
-  const ready = titleReady() && mediaReady() && !publishing();
-  button.disabled = !ready;
+  // Only gate author readiness here. app.js owns the temporary disabled state while publishing.
+  button.disabled = !(titleReady() && mediaReady());
+  button.setAttribute('aria-disabled', String(button.disabled));
   title.setAttribute('aria-required', 'true');
+}
+
+function showTitleRequirement() {
+  const title = el('story-title');
+  const build = el('build-status');
+  const label = el('build-label');
+  if (!title || titleReady()) return false;
+  if (build) build.dataset.state = 'warning';
+  if (label) label.textContent = 'Escribí un título para crear la obra aumentada.';
+  title.focus();
+  title.reportValidity();
+  return true;
 }
 
 function installTitleGuard() {
   const title = el('story-title');
   const form = el('publish-form');
-  if (!title || !form) return;
+  const button = el('btn-publish');
+  if (!title || !form || !button) return;
+
   title.required = true;
   title.addEventListener('input', syncPublishButton);
+  title.addEventListener('change', syncPublishButton);
+
   form.addEventListener('submit', (event) => {
-    if (titleReady()) return;
+    if (!showTitleRequirement()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    title.focus();
-    title.reportValidity();
     syncPublishButton();
   }, true);
 
-  ['image-validation', 'video-validation', 'build-status'].forEach((id) => {
+  button.addEventListener('click', () => {
+    if (!titleReady() || !mediaReady()) return;
+    const label = el('build-label');
+    if (label) label.textContent = 'Iniciando publicación…';
+  }, true);
+
+  ['image-validation', 'video-validation'].forEach((id) => {
     const node = el(id);
     if (!node) return;
     new MutationObserver(syncPublishButton).observe(node, {
@@ -85,6 +102,7 @@ function installTitleGuard() {
       subtree: true,
     });
   });
+
   syncPublishButton();
 }
 
