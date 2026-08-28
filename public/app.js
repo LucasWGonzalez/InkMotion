@@ -3,7 +3,7 @@ import ParallaxEngine from './core/ParallaxEngine.js';
 import ImageProcessor from './core/ImageProcessor.js';
 import ProjectStore from './services/ProjectStore.js';
 import EventBus from './utils/EventBus.js';
-import MasterSheetGenerator from './core/MasterSheetGenerator.js';
+import MasterSheetGenerator from './core/MasterSheetGenerator.js?v=5';
 import VideoProcessor from './core/VideoProcessor.js';
 import ExperienceRecorder from './core/ExperienceRecorder.js';
 
@@ -378,512 +378,333 @@ class InkMotionApp {
     const hasImage = Boolean(project.imageBlob && project.imageDimensions);
     const hasVideo = Boolean(project.videoBlob && project.videoMetadata);
     const publish = document.getElementById('btn-publish');
-    const label = document.getElementById('media-ready-label');
-    if (hasImage && hasVideo) {
-      try {
-        this.videoProcessor.validateAspect(project.imageDimensions, project.videoMetadata);
-        publish.disabled = false;
-        document.getElementById('video-validation').textContent = 'Listo';
-        label.textContent = 'Imagen y video alineados · listos para AR';
-        this.setBuildState('ready', successMessage || 'Imagen y video listos para crear la obra aumentada.', 100);
-      } catch (error) {
-        publish.disabled = true;
-        document.getElementById('video-validation').textContent = 'Revisar';
-        label.textContent = 'Las proporciones no coinciden';
-        this.setBuildState('error', error.message, 0);
-      }
+    const imageValidation = document.getElementById('image-validation');
+    const videoValidation = document.getElementById('video-validation');
+    const readyLabel = document.getElementById('media-ready-label');
+    if (!hasImage || !hasVideo) {
+      publish.disabled = true;
+      imageValidation.textContent = hasImage ? 'Lista' : 'Pendiente';
+      imageValidation.dataset.state = hasImage ? 'ready' : 'pending';
+      videoValidation.textContent = hasVideo ? 'Listo' : 'Pendiente';
+      videoValidation.dataset.state = hasVideo ? 'ready' : 'pending';
+      readyLabel.textContent = hasImage && !hasVideo ? 'Falta el video loop' : !hasImage && hasVideo ? 'Falta la imagen original' : 'Esperando imagen y video';
+      if (hasImage || hasVideo) this.setBuildState('idle', readyLabel.textContent, hasImage ? 25 : 35);
       return;
     }
-    publish.disabled = true;
-    label.textContent = hasImage ? 'Imagen lista · falta el video' : hasVideo ? 'Video listo · falta la imagen' : 'Esperando imagen y video';
-    this.setBuildState('processing', hasImage ? 'Ahora subí el video loop.' : hasVideo ? 'Ahora subí la imagen original.' : 'Esperando imagen y video.', 50);
+    const ratioResult = this.validateMediaRatio();
+    imageValidation.textContent = 'Lista';
+    imageValidation.dataset.state = 'ready';
+    videoValidation.textContent = ratioResult.ok ? 'Compatible' : 'Revisar';
+    videoValidation.dataset.state = ratioResult.ok ? 'ready' : 'warning';
+    publish.disabled = !ratioResult.ok || this.isPublishing;
+    readyLabel.textContent = ratioResult.ok ? 'Imagen y video listos para publicar' : 'La imagen y el video no tienen la misma proporción';
+    this.setBuildState(ratioResult.ok ? 'ready' : 'warning', successMessage || (ratioResult.ok ? 'Archivos listos para crear la obra aumentada.' : ratioResult.message), ratioResult.ok ? 45 : 35);
+  }
+
+  validateMediaRatio() {
+    const image = this.pendingProject?.imageDimensions;
+    const video = this.pendingProject?.videoMetadata;
+    if (!image || !video?.width || !video?.height) return { ok: false, message: 'Todavía faltan datos para comparar la imagen y el video.' };
+    const imageRatio = image.width / image.height;
+    const videoRatio = video.width / video.height;
+    const difference = Math.abs(imageRatio - videoRatio) / imageRatio;
+    if (difference > 0.025) {
+      return { ok: false, message: `La imagen es ${image.width}×${image.height} y el video ${video.width}×${video.height}. Necesitan la misma proporción para mantener el encuadre en AR.` };
+    }
+    return { ok: true, message: '' };
   }
 
   updateMediaMetadata() {
     const project = this.pendingProject || {};
-    const imageMetadata = document.getElementById('image-metadata');
-    const videoMetadata = document.getElementById('video-metadata');
-    const imageValidation = document.getElementById('image-validation');
-    const videoValidation = document.getElementById('video-validation');
-    if (project.imageBlob && project.imageDimensions) {
-      imageMetadata.textContent = `${project.imageName || 'Imagen recuperada'} · ${project.imageDimensions.width} × ${project.imageDimensions.height} px · ${formatBytes(project.imageBlob.size)}`;
-      imageValidation.textContent = 'Lista';
-    } else {
-      imageMetadata.textContent = 'Seleccioná una imagen';
-      imageValidation.textContent = 'Pendiente';
-    }
-    if (project.videoBlob && project.videoMetadata) {
-      videoMetadata.textContent = `${project.videoName || 'Video recuperado'} · ${project.videoMetadata.width} × ${project.videoMetadata.height} px · ${formatDuration(project.videoMetadata.duration)} · ${formatBytes(project.videoBlob.size)}`;
-      videoValidation.textContent = 'Listo';
-    } else {
-      videoMetadata.textContent = 'Seleccioná un video';
-      videoValidation.textContent = 'Pendiente';
-    }
-  }
-
-  async copyLoopPrompt() {
-    const prompt = `Use the uploaded image as the strict and exclusive visual reference for the entire video.
-
-REFERENCE FIDELITY
-Preserve the original image's composition, framing, aspect ratio, perspective, color palette, lighting, artistic style, textures, linework, background and all existing details. The first frame must match the uploaded image. Keep all non-animated regions visually unchanged and stable throughout the video.
-
-LOCKED CAMERA
-Use a completely static tripod shot. Absolute zero camera movement: no zoom, pan, tilt, roll, shift, dolly, orbit, reframing, perspective change, parallax or simulated depth movement. Do not crop, stretch, rotate or change the aspect ratio.
-
-SUBTLE LOCALIZED ANIMATION
-Create only subtle, natural and cyclical micro-movements in a small number of elements already visible in the source image. Automatically choose movements appropriate to the existing content.
-
-Keep the main subject's position, silhouette, proportions, anatomy, geometry, structural lines and contact points locked in place. Keep the background fixed. Motion must remain localized and must not cause the rest of the image to drift, warp or move.
-
-SEAMLESS LOOP
-Create one continuous shot that returns smoothly to its initial visual state. The final frame must match the first frame as closely as possible, with every animated element returning to its original position, shape, scale, color and lighting state. No visible jump at the loop point.
-
-STRICT RESTRICTIONS
-Do not add, remove, replace or redesign any object, character, body part, facial feature, texture, shadow, reflection or background element.
-Do not morph, deform, melt, stretch, duplicate or reshape anything.
-Do not change anatomy, proportions, geometry, line art, palette, art style or scene layout.
-Do not introduce new camera angles, foreground elements or background expansion.
-Preserve all existing text, logos and symbols exactly; do not alter them or generate new text.
-No cuts, transitions, scene changes, flicker, flashing, sudden movement, frame instability or temporal artifacts.
-
-OUTPUT
-One continuous MP4 shot, fixed camera, no audio, fully faithful to the uploaded image and suitable for a seamless AR loop.`;
-    await navigator.clipboard.writeText(prompt);
-    const button = document.getElementById('btn-copy-prompt');
-    button.textContent = 'Instrucciones copiadas';
-    window.setTimeout(() => { button.textContent = 'Copiar instrucciones para crear el video loop'; }, 1800);
+    const imageText = project.imageDimensions ? `${project.imageName || 'Imagen'} · ${project.imageDimensions.width}×${project.imageDimensions.height} · ${formatBytes(project.imageBlob?.size)}` : 'Seleccioná una imagen';
+    const videoText = project.videoMetadata ? `${project.videoName || 'Video'} · ${project.videoMetadata.width}×${project.videoMetadata.height} · ${formatDuration(project.videoMetadata.duration)} · ${formatBytes(project.videoBlob?.size)}` : 'Seleccioná un video';
+    document.getElementById('image-metadata').textContent = imageText;
+    document.getElementById('video-metadata').textContent = videoText;
   }
 
   async publishStory(event) {
-    event?.preventDefault();
+    event.preventDefault();
     if (!this.pendingProject?.imageBlob || !this.pendingProject?.videoBlob) return;
-    this.clearRetry();
-    const button = document.getElementById('btn-publish');
-    const form = document.getElementById('publish-form');
-    const title = new FormData(form).get('title')?.toString().trim() || 'Obra sin título';
-    button.disabled = true;
+    if (!this.validateMediaRatio().ok) { this.updateMediaReadiness(); return; }
+    if (this.isPublishing) return;
     this.isPublishing = true;
     this.publicationProgress = 0;
-    this.setBuildState('publishing', 'Validando los archivos de la obra…', 5);
+    document.getElementById('btn-publish').disabled = true;
+    this.clearRetry();
     try {
-      const projectId = this.pendingProject.id || crypto.randomUUID();
-      this.pendingProject.id = projectId;
-      const url = `${window.location.origin}/v/${compactProjectId(projectId)}`;
-      this.setBuildState('publishing', 'Componiendo lámina maestra a 300 DPI…', 12);
-      const sheet = await this.sheetGenerator.compose({ illustrationUrl: this.pendingProject.imageUrl, publicUrl: url, title });
-      this.setBuildState('publishing', 'Lámina compuesta · compilando el marcador AR…', 25);
-      const compiled = await new MindARManager().compileTarget(sheet.imageUrl);
-      this.setBuildState('publishing', 'Marcador AR validado · preparando el PDF…', 58);
+      const id = this.pendingProject.id || crypto.randomUUID();
+      this.pendingProject.id = id;
+      const publicUrl = `${window.location.origin}/v/${compactProjectId(id)}`;
+      const title = document.getElementById('story-title').value.trim() || 'Obra InkMotion';
+      this.setBuildState('processing', 'Componiendo la Lámina Maestra…', 52);
+      const sheet = await this.sheetGenerator.compose({ illustrationUrl: this.pendingProject.imageUrl, publicUrl, title });
+      this.pendingProject.masterSheet = sheet;
+      this.setBuildState('processing', 'Validando calidad de tracking…', 60);
+      const manager = new MindARManager();
+      const trackingQuality = await manager.measureVisualQuality(sheet.imageUrl);
+      const targetBlob = await manager.compileTarget(sheet.imageUrl, ({ progress }) => this.setBuildState('processing', progress < 85 ? 'Compilando marcador AR…' : 'Terminando marcador AR…', 60 + Math.round(progress * 0.06)));
       const pdfBlob = await this.sheetGenerator.createPdf(sheet.jpegDataUrl, sheet.pageSizeMm);
-      const config = { animation: 'video-loop-lift', loopSeconds: this.pendingProject.videoMetadata.duration, anchor: 'mindar', contentRect: sheet.contentRect, sheetDpi: sheet.dpi };
-      this.setBuildState('publishing', 'PDF listo · iniciando la publicación…', 65);
-      await this.store.saveProject({
-        id: projectId,
-        title,
-        imageBlob: this.pendingProject.imageBlob,
-        videoBlob: this.pendingProject.videoBlob,
-        targetBlob: compiled.blob,
-        config,
-        onStage: ({ message, progress }) => this.setBuildState('publishing', message, progress),
-      });
-      this.masterSheetPdfUrl = URL.createObjectURL(pdfBlob);
-      document.getElementById('public-link').value = url;
-      document.getElementById('btn-open-story').href = url;
-      this.publishedTitle = title;
-      await this.prepareSheetResult(sheet.canvas);
-      document.getElementById('publish-result').hidden = false;
-      this.setBuildState('published', 'Obra publicada correctamente.', 100);
-      this.isPublishing = false;
+      this.pendingProject.pdfBlob = pdfBlob;
+      this.setBuildState('processing', `Tracking ${trackingQuality.rating === 'good' ? 'fuerte' : 'aceptable'} · preparando subida…`, 67);
+      await this.store.saveProject({ id, title, imageBlob: this.pendingProject.imageBlob, videoBlob: this.pendingProject.videoBlob, targetBlob, config: { contentRect: sheet.contentRect, targetAspect: sheet.contentRect.targetAspect, trackingQuality, video: this.pendingProject.videoMetadata }, onStage: ({ message, progress }) => this.setBuildState('processing', message, progress) });
+      this.showPublishResult(id, publicUrl, sheet.canvas);
       await this.loadMyProjects();
+      this.setBuildState('success', 'Publicación lista · lámina, video y marcador AR guardados.', 100);
     } catch (error) {
-      console.error('[InkMotion] No se pudo publicar el proyecto', {
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        code: error?.code,
-        status: error?.status || error?.statusCode,
-        imageSizeBytes: this.pendingProject?.imageBlob?.size,
-        videoSizeBytes: this.pendingProject?.videoBlob?.size,
-        targetSizeBytes: this.pendingProject?.targetBlob?.size,
-        online: navigator.onLine,
-      }, error);
-      const message = this.errorMessage(error, 'No se pudo publicar. Intentá nuevamente.');
+      console.error('[InkMotion] Falló la publicación.', error);
+      const message = this.errorMessage(error, 'No pudimos crear la publicación.');
       this.setBuildState('error', message, 0);
-      this.isPublishing = false;
       if (this.isNetworkError(error)) this.offerRetry('publish');
-      button.disabled = false;
-      if (error?.code === 'AUTH_SESSION_EXPIRED') {
-        document.getElementById('auth-status').textContent = message;
-        this.renderAuthorSession(null);
-      }
-    }
-  }
-
-  isNetworkError(error) {
-    const message = `${error?.message || error || ''}`;
-    return error?.code === 'NETWORK_ERROR' || /failed to fetch|fetch failed|networkerror|network request failed|load failed/i.test(message);
-  }
-
-  errorMessage(error, fallback) {
-    return this.isNetworkError(error) ? NETWORK_ERROR_MESSAGE : (error?.message || fallback);
-  }
-
-  offerRetry(action) {
-    this.retryAction = action;
-    const button = document.getElementById('btn-retry');
-    button.hidden = false;
-    button.disabled = false;
-  }
-
-  clearRetry() {
-    this.retryAction = null;
-    const button = document.getElementById('btn-retry');
-    if (button) button.hidden = true;
-  }
-
-  async retryLastAction() {
-    const action = this.retryAction;
-    if (!action) return;
-    const button = document.getElementById('btn-retry');
-    button.disabled = true;
-    button.textContent = 'Reintentando…';
-    try {
-      if (action === 'prepare' && this.lastSelectedFile) await this.prepareStory(this.lastSelectedFile);
-      else if (action === 'publish') await this.publishStory();
     } finally {
-      button.textContent = 'Reintentar';
-      if (!button.hidden) button.disabled = false;
+      this.isPublishing = false;
+      this.updateMediaReadiness();
     }
   }
 
-  async copyPublishedLink() {
+  showPublishResult(id, publicUrl, sheetCanvas) {
+    const result = document.getElementById('publish-result');
+    result.hidden = false;
     const input = document.getElementById('public-link');
-    await navigator.clipboard.writeText(input.value);
-    document.getElementById('btn-copy-link').textContent = 'Copiado';
-  }
-
-  async prepareSheetResult(sheetCanvas) {
+    input.value = publicUrl;
+    const open = document.getElementById('btn-open-story');
+    open.href = publicUrl;
+    const previewWrap = document.getElementById('qr-canvas-wrap');
+    previewWrap.hidden = false;
     const canvas = document.getElementById('story-qr');
-    const canvasWrap = document.getElementById('qr-canvas-wrap');
-    const status = document.getElementById('qr-status');
-    const download = document.getElementById('btn-download-sheet');
-    status.textContent = 'Preparando la lámina final…';
-    download.disabled = true;
-    try {
-      canvas.width = sheetCanvas.width;
-      canvas.height = sheetCanvas.height;
-      canvas.getContext('2d').drawImage(sheetCanvas, 0, 0);
-      canvasWrap.hidden = false;
-      canvas.hidden = false;
-      status.textContent = 'Lámina generada: tu ilustración, el marco de anclaje AR y el acceso directo integrados en un solo diseño listo para imprimir.';
-      download.disabled = false;
-    } catch (error) {
-      canvas.hidden = true;
-      canvasWrap.hidden = true;
-      status.textContent = 'La obra fue publicada, pero no se pudo preparar la vista de la lámina.';
-      console.error(error);
-    }
+    canvas.hidden = false;
+    canvas.width = sheetCanvas.width;
+    canvas.height = sheetCanvas.height;
+    canvas.getContext('2d').drawImage(sheetCanvas, 0, 0);
+    document.getElementById('qr-status').textContent = 'Lámina lista para imprimir. Usá el PDF sin escalar para conservar el tracking.';
+    document.getElementById('btn-download-sheet').disabled = false;
+    result.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  downloadMasterSheet() {
-    if (!this.masterSheetPdfUrl) return;
+  async downloadMasterSheet() {
+    const pdfBlob = this.pendingProject?.pdfBlob;
+    if (!pdfBlob) return;
+    const url = URL.createObjectURL(pdfBlob);
     const link = document.createElement('a');
-    link.href = this.masterSheetPdfUrl;
+    link.href = url;
     link.download = 'InkMotion_Lamina_Final.pdf';
     document.body.appendChild(link);
     link.click();
     link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   }
 
-  setBuildState(state, message, progress) {
-    const box = document.getElementById('build-status');
-    if (!box) return;
-    const safeProgress = Math.max(0, Math.min(100, Number(progress) || 0));
-    const displayProgress = this.isPublishing && ['publishing', 'processing'].includes(state)
-      ? Math.max(this.publicationProgress, safeProgress)
-      : safeProgress;
-    if (this.isPublishing && ['publishing', 'processing'].includes(state)) this.publicationProgress = displayProgress;
-    box.dataset.state = state;
-    document.getElementById('build-label').textContent = message;
-    document.getElementById('build-progress').style.width = `${displayProgress}%`;
+  async copyPublishedLink() {
+    const input = document.getElementById('public-link');
+    try {
+      await navigator.clipboard.writeText(input.value);
+      document.getElementById('btn-copy-link').textContent = 'Copiado';
+      window.setTimeout(() => { document.getElementById('btn-copy-link').textContent = 'Copiar'; }, 1_500);
+    } catch { input.select(); document.execCommand('copy'); }
+  }
+
+  copyLoopPrompt() {
+    const prompt = `Image Reference Control: Use the uploaded image as the exact visual reference and first frame. Preserve its composition, framing, aspect ratio, color palette, text, linework, characters and object geometry.\n\nCamera Lock: Static tripod shot. No zoom, pan, tilt, orbit, dolly, crop or reframing.\n\nMotion: Animate only subtle internal or atmospheric details that make sense for this specific image, such as gentle wind, breathing, water, smoke, light, particles or small environmental movement. Keep all structural shapes and the main subject locked. No morphing, warping, added objects, removed objects or redesigned details.\n\nLoop: Create a seamless short loop. The last frame should visually return to the original image. If the tool supports first and last frame references, use this same uploaded image for both.\n\nOutput: Keep the original aspect ratio and composition. Preserve readable text and logos exactly. No camera movement.`;
+    navigator.clipboard.writeText(prompt).then(() => {
+      const button = document.getElementById('btn-copy-prompt');
+      button.textContent = 'Instrucciones copiadas';
+      window.setTimeout(() => { button.textContent = 'Copiar instrucciones para crear el video loop'; }, 1_800);
+    }).catch(() => {});
   }
 
   async startReader(id) {
     document.body.dataset.route = 'reader';
     document.getElementById('reader-view').hidden = false;
-    this.setReaderStatus('Cargando obra…', 'loading');
+    const statusText = document.getElementById('reader-status-text');
     try {
+      statusText.textContent = 'Buscando la obra…';
       const project = await this.store.getProject(id);
-      if (!project) return this.showFatal('Esta obra no existe o todavía no fue publicada.');
-      document.title = `${project.title} · InkMotion`;
+      if (!project) throw new Error('Esta obra no existe o ya no está disponible.');
       document.getElementById('reader-title').textContent = project.title;
       document.getElementById('info-title').textContent = project.title;
-      document.getElementById('btn-info').addEventListener('click', () => document.getElementById('story-info').showModal());
-      document.getElementById('btn-close-info').addEventListener('click', () => document.getElementById('story-info').close());
-      document.getElementById('btn-camera-mode').addEventListener('click', () => this.toggleReaderMode());
-      if (!project.videoUrl) throw new Error('Esta publicación pertenece a una versión anterior de InkMotion. Volvé a publicarla agregando su video loop.');
-      this.parallax = new ParallaxEngine({ container: '#ar-overlay', contentRect: project.config?.contentRect });
-      await this.parallax.init();
-      await this.parallax.setTargetVideo(project.imageUrl, project.videoUrl);
-      this.mindAR = new MindARManager({ video: '#video-stream' });
-      const ready = await this.mindAR.init();
-      if (!ready) throw new Error('No se pudo iniciar la cámara. Revisá sus permisos.');
-      this.setReaderStatus('Verificando marcador AR…', 'loading');
-      await this.mindAR.setCompiledTarget(project.targetUrl);
-      this.setupExperienceRecorder();
-      this.setReaderStatus('Buscando ilustración...', 'scanning');
-    } catch (error) { this.showFatal(error.message || 'No se pudo abrir esta obra.'); }
-  }
-
-  toggleReaderMode() {
-    this.readerCameraOnly = !this.readerCameraOnly;
-    this.parallax?.setPreviewMode(this.readerCameraOnly ? 'camera' : '3d');
-    document.getElementById('btn-camera-mode').textContent = this.readerCameraOnly ? 'Ver efecto AR' : 'Solo cámara';
-  }
-
-  setupExperienceRecorder() {
-    if (!ExperienceRecorder.isSupported()) return;
-    const sources = this.parallax.getCaptureSources();
-    this.experienceRecorder = new ExperienceRecorder({
-      cameraVideo: document.getElementById('video-stream'),
-      arCanvas: sources.arCanvas,
-      animatedVideo: sources.animatedVideo,
-      viewport: document.getElementById('reader-view'),
-    });
-    this.removeRecorderFrameListener = this.parallax.addFrameListener(() => {
-      if (this.experienceRecorder?.isRecording()) this.experienceRecorder.drawFrame();
-    });
-    document.getElementById('capture-controls').hidden = false;
-    document.body.classList.add('capture-available');
-    document.getElementById('btn-record').addEventListener('click', () => this.toggleExperienceRecording());
-    document.getElementById('btn-sound').addEventListener('click', () => this.toggleExperienceSound());
-    document.getElementById('btn-download-recording').addEventListener('click', () => this.downloadExperienceRecording());
-    document.getElementById('btn-share-recording').addEventListener('click', () => this.shareExperienceRecording());
-    document.getElementById('btn-discard-recording').addEventListener('click', () => this.closeExperienceRecording());
-    document.getElementById('recording-result').addEventListener('close', () => this.closeExperienceRecording(false));
-    if (this.mindAR?.isTargetVisible) document.getElementById('btn-record').disabled = false;
-  }
-
-  async toggleExperienceSound() {
-    const button = document.getElementById('btn-sound');
-    try {
-      const enabled = await this.experienceRecorder.setSoundEnabled(button.getAttribute('aria-pressed') !== 'true');
-      button.setAttribute('aria-pressed', `${enabled}`);
-      button.setAttribute('aria-label', enabled ? 'Silenciar animación' : 'Activar sonido');
-      button.classList.toggle('is-active', enabled);
+      const manager = new MindARManager();
+      const engine = new ParallaxEngine(document.getElementById('ar-overlay'));
+      this.experienceRecorder = new ExperienceRecorder({ videoElement: document.getElementById('video-stream'), canvasProvider: () => engine.renderer?.domElement || null });
+      const storedRect = project.config?.contentRect || { x: 0, y: 0, width: 1, height: 1, targetAspect: 1 };
+      await engine.load(project.imageUrl, project.videoUrl, storedRect);
+      await manager.start({ container: document.getElementById('camera-feed'), targetUrl: project.targetUrl, targetIndex: 0, onAnchor: (group) => engine.attachToAnchor(group) });
+      this.bindReaderControls(manager, engine, project);
+      statusText.textContent = 'Buscando la lámina…';
     } catch (error) {
-      console.warn('[InkMotion/Audio] No se pudo activar el sonido.', error);
-      this.setReaderStatus('Este navegador no pudo activar el sonido.', 'warning');
+      console.error(error);
+      this.showFatal(this.errorMessage(error, 'No pudimos abrir esta experiencia.'), '/crear', 'Crear una obra');
     }
   }
 
-  async toggleExperienceRecording() {
+  bindReaderControls(manager, engine, project) {
+    document.getElementById('btn-camera-mode').addEventListener('click', () => engine.toggleCameraOnly());
+    document.getElementById('btn-info').addEventListener('click', () => document.getElementById('story-info').showModal());
+    document.getElementById('btn-close-info').addEventListener('click', () => document.getElementById('story-info').close());
+    document.getElementById('btn-sound').addEventListener('click', async () => {
+      const enabled = await engine.toggleSound();
+      const button = document.getElementById('btn-sound');
+      button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      button.setAttribute('aria-label', enabled ? 'Silenciar sonido' : 'Activar sonido');
+    });
+    const capture = document.getElementById('capture-controls');
+    if (this.experienceRecorder?.supported) {
+      capture.hidden = false;
+      const record = document.getElementById('btn-record');
+      record.disabled = false;
+      record.addEventListener('click', () => this.toggleRecording());
+      document.getElementById('btn-download-recording').addEventListener('click', () => this.downloadRecording());
+      document.getElementById('btn-share-recording').addEventListener('click', () => this.shareRecording());
+      document.getElementById('btn-discard-recording').addEventListener('click', () => this.discardRecording());
+    }
+    EventBus.on('target:found', () => {
+      document.getElementById('reader-status').dataset.state = 'found';
+      document.getElementById('reader-status-text').textContent = 'La obra cobró vida';
+      if (navigator.vibrate) navigator.vibrate(35);
+    });
+    EventBus.on('target:lost', () => {
+      document.getElementById('reader-status').dataset.state = 'searching';
+      document.getElementById('reader-status-text').textContent = 'Volvé a encuadrar la lámina';
+    });
+  }
+
+  async toggleRecording() {
     const button = document.getElementById('btn-record');
-    try {
-      if (this.experienceRecorder.isRecording()) {
-        button.disabled = true;
-        this.experienceRecorder.stop();
-      } else {
+    if (!this.experienceRecorder?.isRecording) {
+      try {
         await this.experienceRecorder.start();
-      }
-    } catch (error) {
-      console.error('[InkMotion/Recorder] No se pudo iniciar la grabación.', error);
-      this.setReaderStatus(error.message || 'No se pudo iniciar la grabación.', 'error');
-      button.disabled = false;
+        button.classList.add('is-recording');
+        button.setAttribute('aria-label', 'Detener grabación');
+        this.startRecordingClock();
+      } catch (error) { console.error('No se pudo iniciar la grabación.', error); }
+      return;
     }
+    try {
+      this.recordingResult = await this.experienceRecorder.stop();
+      button.classList.remove('is-recording');
+      button.setAttribute('aria-label', 'Iniciar grabación');
+      this.stopRecordingClock();
+      const preview = document.getElementById('recording-preview');
+      preview.src = this.recordingResult.url;
+      document.getElementById('recording-result').showModal();
+    } catch (error) { console.error('No se pudo finalizar la grabación.', error); }
   }
 
-  showExperienceRecording(result) {
-    this.closeExperienceRecording(false);
-    this.recordingResult = { ...result, url: URL.createObjectURL(result.blob) };
-    const preview = document.getElementById('recording-preview');
-    preview.src = this.recordingResult.url;
-    const shareButton = document.getElementById('btn-share-recording');
-    const file = this.recordingFile();
-    const canShareFile = Boolean(navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] })));
-    shareButton.hidden = !canShareFile;
-    shareButton.disabled = false;
-    document.getElementById('recording-note').textContent = canShareFile
-      ? 'La grabación todavía no está guardada. Podés guardarla o compartirla. No se sube a InkMotion.'
-      : 'La grabación todavía no está guardada. Este navegador no permite compartirla directamente; podés guardarla.';
-    document.getElementById('recording-result').showModal();
+  startRecordingClock() {
+    this.recordingStartedAt = Date.now();
+    const time = document.getElementById('recording-time');
+    const tick = () => {
+      if (!this.experienceRecorder?.isRecording) return;
+      const seconds = Math.floor((Date.now() - this.recordingStartedAt) / 1000);
+      time.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+      time.dateTime = `PT${seconds}S`;
+      this.recordingTimer = window.setTimeout(tick, 500);
+    };
+    tick();
   }
 
-  recordingFile() {
-    if (!this.recordingResult) return null;
-    const extension = this.recordingResult.extension === 'mp4' ? 'mp4' : 'webm';
-    const type = extension === 'mp4' ? 'video/mp4' : 'video/webm';
-    if (!this.recordingResult.filename) {
-      const date = new Date();
-      const day = [date.getFullYear(), date.getMonth() + 1, date.getDate()]
-        .map((part, index) => index === 0 ? String(part) : String(part).padStart(2, '0'))
-        .join('-');
-      const time = [date.getHours(), date.getMinutes(), date.getSeconds()]
-        .map((part) => String(part).padStart(2, '0'))
-        .join('-');
-      this.recordingResult.filename = `InkMotion_AR_${day}_${time}.${extension}`;
-    }
-    return new File([this.recordingResult.blob], this.recordingResult.filename, { type });
+  stopRecordingClock() {
+    window.clearTimeout(this.recordingTimer);
+    const time = document.getElementById('recording-time');
+    time.textContent = '00:00';
+    time.dateTime = 'PT0S';
   }
 
-  downloadExperienceRecording() {
-    const file = this.recordingFile();
-    if (!file || !this.recordingResult?.url) return;
+  downloadRecording() {
+    if (!this.recordingResult) return;
     const link = document.createElement('a');
     link.href = this.recordingResult.url;
-    link.download = file.name;
+    link.download = `InkMotion-AR.${this.recordingResult.extension}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
-    const note = document.getElementById('recording-note');
-    note.textContent = 'Descarga iniciada. Buscá el video en la carpeta Descargas de tu dispositivo.';
   }
 
-  async shareExperienceRecording() {
-    const file = this.recordingFile();
-    if (!file) return;
-    const button = document.getElementById('btn-share-recording');
+  async shareRecording() {
     const note = document.getElementById('recording-note');
-    if (!navigator.share || (navigator.canShare && !navigator.canShare({ files: [file] }))) {
-      note.textContent = 'Este navegador no permite compartir el archivo directamente. Usá Guardar video.';
+    if (!this.recordingResult) return;
+    if (!navigator.share || !navigator.canShare) {
+      note.textContent = 'Este navegador no permite compartir archivos directamente. Usá Guardar video y compartilo desde tu galería o gestor de archivos.';
       return;
     }
-    button.disabled = true;
     try {
-      // En iOS, compartir solamente el archivo es más compatible que mezclarlo con title/text.
-      await navigator.share({ files: [file] });
-      note.textContent = 'Compartido desde el menú del dispositivo.';
-    } catch (error) {
-      if (error?.name !== 'AbortError') {
-        console.error('[InkMotion/Share] No se pudo abrir el menú nativo.', error);
-        note.textContent = 'No se pudo abrir el menú Compartir. La grabación no fue descargada automáticamente.';
+      const shareType = this.recordingResult.extension === 'mp4' ? 'video/mp4' : 'video/webm';
+      const file = new File([this.recordingResult.blob], `InkMotion-AR.${this.recordingResult.extension}`, { type: shareType });
+      if (!navigator.canShare({ files: [file] })) {
+        note.textContent = 'Este dispositivo no admite compartir este archivo directamente. Usá Guardar video.';
+        return;
       }
-    } finally {
-      button.disabled = false;
+      await navigator.share({ files: [file] });
+      note.textContent = 'Se abrió el menú de compartir del dispositivo.';
+    } catch (error) {
+      if (error?.name === 'AbortError') { note.textContent = 'Compartir cancelado.'; return; }
+      console.error('No se pudo compartir la grabación.', error);
+      note.textContent = 'No se pudo abrir el menú de compartir. Usá Guardar video si querés conservarlo.';
     }
   }
 
-  closeExperienceRecording(closeDialog = true) {
+  discardRecording() {
     const dialog = document.getElementById('recording-result');
-    const preview = document.getElementById('recording-preview');
-    preview?.pause();
-    if (preview) preview.removeAttribute('src');
+    if (dialog.open) dialog.close();
     if (this.recordingResult?.url) URL.revokeObjectURL(this.recordingResult.url);
     this.recordingResult = null;
-    if (closeDialog && dialog?.open) dialog.close();
-  }
-
-  formatRecordingTime(seconds) {
-    const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const remainder = (seconds % 60).toString().padStart(2, '0');
-    return `${minutes}:${remainder}`;
+    document.getElementById('recording-preview').removeAttribute('src');
+    document.getElementById('recording-note').textContent = 'La grabación todavía no está guardada. Podés guardarla o compartirla. No se sube a InkMotion.';
   }
 
   bindTrackingEvents() {
-    window.addEventListener('error', (event) => {
-      console.error('[InkMotion/Global] Excepción no controlada', event.error || event.message);
+    EventBus.on('mindar:status', ({ state, message }) => {
+      const reader = document.getElementById('reader-status');
+      if (!reader) return;
+      reader.dataset.state = state;
+      document.getElementById('reader-status-text').textContent = message;
     });
-    window.addEventListener('unhandledrejection', (event) => {
-      console.error('[InkMotion/Global] Promise rechazada sin controlar', event.reason);
-    });
-    EventBus.on('mindar:engine-state', ({ state, attempt, total }) => {
-      if (this.isPublishing) {
-        const message = state === 'ready'
-          ? 'Motor AR conectado · analizando la lámina…'
-          : state === 'retrying'
-          ? `Conectando con el motor AR · alternativa ${attempt} de ${total}…`
-          : 'Conectando con el motor AR…';
-        this.setBuildState('publishing', message, 25);
-        return;
-      }
-      if (state === 'ready') this.setBuildState('processing', 'Motor AR conectado · analizando imagen…', 20);
-      else if (state === 'retrying') this.setBuildState('processing', `Conectando con el motor AR · alternativa ${attempt} de ${total}…`, 10);
-      else this.setBuildState('processing', 'Conectando con el motor AR…', 8);
-    });
-    EventBus.on('mindar:compilation-progress', ({ progress }) => {
-      const normalized = Math.min(100, progress);
-      if (this.isPublishing) {
-        this.setBuildState('publishing', `Compilando marcador AR · ${normalized}%`, 25 + normalized * 0.3);
-      } else {
-        this.setBuildState('processing', `Compilando marcador AR · ${normalized}%`, normalized);
-      }
-    });
-    EventBus.on('mindar:target-quality', ({ quality }) => {
-      if (!this.isPublishing) return;
-      const message = quality === 'good'
-        ? 'Tracking fuerte · preparando archivos finales…'
-        : 'Tracking aceptable · usá buena luz al escanear.';
-      this.setBuildState('publishing', message, 56);
-    });
-    EventBus.on('mindar:target-found', () => {
-      window.clearTimeout(this.readerLostTimer);
-      this.readerLostTimer = null;
-      this.parallax?.onTargetFound();
-      document.getElementById('reader-view')?.classList.add('target-found');
-      this.setReaderStatus('La obra cobró vida', 'found');
-      const recordButton = document.getElementById('btn-record');
-      if (recordButton) recordButton.disabled = false;
-      navigator.vibrate?.(35);
-    });
-    EventBus.on('mindar:target-lost', () => {
-      window.clearTimeout(this.readerLostTimer);
-      this.readerLostTimer = window.setTimeout(() => {
-        this.parallax?.onTargetLost();
-        document.getElementById('reader-view')?.classList.remove('target-found');
-        this.setReaderStatus('Encuadrá la lámina completa', 'lost');
-        const recordButton = document.getElementById('btn-record');
-        if (recordButton && !this.experienceRecorder?.isRecording()) recordButton.disabled = true;
-      }, 400);
-    });
-    EventBus.on('mindar:target-update', (data) => this.parallax?.updateWorldAnchor(data));
-    EventBus.on('mindar:projection-ready', (data) => { this.parallax?.setProjectionMatrix(data.projectionMatrix); this.parallax?.setVideoViewport(data); });
-    EventBus.on('mindar:video-ready', (data) => this.parallax?.setVideoViewport(data));
-    EventBus.on('mindar:target-download', ({ state, error }) => {
-      if (state === 'downloading') this.setReaderStatus('Descargando marcador AR…', 'loading');
-      else if (state === 'ready') this.setReaderStatus('Marcador listo · buscando ilustración...', 'scanning');
-      else if (state === 'error') this.setReaderStatus(error?.message || 'No se pudo descargar el marcador AR.', 'error');
-    });
-    EventBus.on('mindar:scan-timeout', ({ message }) => this.setReaderStatus(message, 'warning'));
-    EventBus.on('mindar:processing-error', (error) => this.setReaderStatus(error?.message || 'El motor AR interrumpió el procesamiento.', 'error'));
-    EventBus.on('parallax:webgl-error', (error) => this.setReaderStatus(error?.message || 'WebGL dejó de responder.', 'error'));
-    EventBus.on('parallax:video-error', () => {
-      this.setReaderStatus('Tocá la pantalla para activar el video. Si no aparece, usá un MP4 H.264.', 'warning');
-    });
-    EventBus.on('recorder:state', ({ state }) => {
-      const button = document.getElementById('btn-record');
-      const controls = document.getElementById('capture-controls');
-      if (!button || !controls) return;
-      const recording = state === 'recording';
-      controls.classList.toggle('is-recording', recording);
-      button.disabled = false;
-      button.setAttribute('aria-label', recording ? 'Detener grabación' : 'Iniciar grabación');
-      if (!recording) document.getElementById('recording-time').textContent = '00:00';
-    });
-    EventBus.on('recorder:tick', ({ seconds }) => {
-      const time = document.getElementById('recording-time');
-      if (!time) return;
-      time.textContent = this.formatRecordingTime(seconds);
-      time.dateTime = `PT${seconds}S`;
-    });
-    EventBus.on('recorder:complete', (result) => this.showExperienceRecording(result));
-    EventBus.on('recorder:error', (error) => this.setReaderStatus(error?.message || 'La grabación fue interrumpida por el dispositivo.', 'warning'));
-    EventBus.on('recorder:audio-warning', () => this.setReaderStatus('La grabación continuará sin audio en este dispositivo.', 'warning'));
   }
 
-  setReaderStatus(message, state) {
-    const status = document.getElementById('reader-status');
-    if (!status) return;
-    status.dataset.state = state;
-    document.getElementById('reader-status-text').textContent = message;
+  setBuildState(state, message, progress) {
+    const build = document.getElementById('build-status');
+    build.dataset.state = state;
+    const next = Math.max(this.publicationProgress || 0, Math.min(100, Number(progress) || 0));
+    if (state === 'error' || state === 'warning') this.publicationProgress = Math.max(0, Number(progress) || 0);
+    else this.publicationProgress = next;
+    document.getElementById('build-label').textContent = message;
+    document.getElementById('build-progress').style.width = `${this.publicationProgress}%`;
   }
 
-  showFatal(message, href = '/crear', label = 'Volver a crear') {
-    document.querySelectorAll('main > section').forEach((section) => { section.hidden = true; });
-    const fatal = document.getElementById('fatal-view');
-    fatal.hidden = false;
+  offerRetry(action) {
+    this.retryAction = action;
+    document.getElementById('btn-retry').hidden = false;
+  }
+
+  clearRetry() {
+    this.retryAction = null;
+    document.getElementById('btn-retry').hidden = true;
+  }
+
+  retryLastAction() {
+    const action = this.retryAction;
+    this.clearRetry();
+    if (action === 'publish') this.publishStory(new Event('submit'));
+    else if (action === 'prepare' && this.lastSelectedFile) this.prepareStory(this.lastSelectedFile);
+  }
+
+  isNetworkError(error) {
+    return error?.code === 'NETWORK_ERROR' || /failed to fetch|network|load failed/i.test(error?.message || '');
+  }
+
+  errorMessage(error, fallback) {
+    if (!error) return fallback;
+    if (error.code === 'NETWORK_ERROR') return NETWORK_ERROR_MESSAGE;
+    if (error.code === 'AUTH_SESSION_EXPIRED') return 'Tu sesión expiró. Volvé a iniciar sesión y repetí la publicación.';
+    return error.message || fallback;
+  }
+
+  showFatal(message, link = '/crear', label = 'Volver') {
+    document.getElementById('author-view').hidden = true;
+    document.getElementById('reader-view').hidden = true;
+    document.getElementById('fatal-view').hidden = false;
     document.getElementById('fatal-message').textContent = message;
-    const link = document.getElementById('fatal-link');
-    link.href = href; link.textContent = label;
+    const anchor = document.getElementById('fatal-link');
+    anchor.href = link;
+    anchor.textContent = label;
   }
 }
 
