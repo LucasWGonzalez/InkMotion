@@ -1,4 +1,4 @@
-import MindARManager from './core/MindARManager.js';
+import MindARManager from './core/MindARManager.js?v=2';
 import ParallaxEngine from './core/ParallaxEngine.js';
 import ImageProcessor from './core/ImageProcessor.js';
 import ProjectStore from './services/ProjectStore.js?v=2';
@@ -493,8 +493,14 @@ class InkMotionApp {
       this.pendingProject.masterSheet = sheet;
       this.setBuildState('processing', 'Validando calidad de tracking…', 60);
       const manager = new MindARManager();
-      const trackingQuality = await manager.measureVisualQuality(sheet.imageUrl);
-      const { blob: targetBlob } = await manager.compileTarget(sheet.imageUrl);
+      const compiledTarget = await manager.compileTarget(sheet.imageUrl);
+      const { blob: targetBlob, featureCount, visualQuality, rating } = compiledTarget;
+      const trackingQuality = {
+        rating,
+        featureCount,
+        contrast: Math.round(visualQuality.contrast),
+        edgeRatio: visualQuality.edgeRatio,
+      };
       const pdfBlob = await this.sheetGenerator.createPdf(sheet.jpegDataUrl, sheet.pageSizeMm);
       this.pendingProject.pdfBlob = pdfBlob;
       this.setBuildState('processing', `Tracking ${trackingQuality.rating === 'good' ? 'fuerte' : 'aceptable'} · preparando subida…`, 67);
