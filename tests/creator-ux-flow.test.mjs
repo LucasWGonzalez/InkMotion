@@ -12,16 +12,20 @@ test('una proporción incompatible muestra un error accionable', async () => {
   assert.match(html, /No podés continuar hasta reemplazar el video/);
 });
 
-test('la prueba AR orienta a escritorio hacia el celular', async () => {
+test('el resultado usa solamente el QR incluido en la lámina', async () => {
   const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
   const css = await readFile(new URL('../public/css/routes.css', import.meta.url), 'utf8');
-  assert.match(app, /mobile \? 'Abrir experiencia AR' : 'Probar en un celular'/);
-  assert.match(app, /renderStoryQR\(document\.getElementById\('desktop-story-qr'\), publicUrl/);
-  assert.match(html, /Escaneá este código con tu celular/);
-  assert.match(html, /id="ar-device-help"/);
-  assert.match(css, /\.desktop-ar-guide canvas\{[^}]*width:104px!important[^}]*height:104px!important/);
-  assert.match(html, /routes\.css\?v=2/);
+  assert.doesNotMatch(html, /id="btn-open-story"/);
+  assert.doesNotMatch(html, /id="desktop-story-qr"/);
+  assert.doesNotMatch(app, /renderStoryQR/);
+  assert.match(html, /QR que ya está incluido en la lámina/);
+  assert.match(html, /Descargá e imprimí la lámina, o abrila en otra pantalla/);
+  assert.match(html, /Enlace directo para compartir/);
+  assert.doesNotMatch(html, /Escaneá este código con tu celular/);
+  assert.doesNotMatch(html, /id="ar-device-help"/);
+  assert.match(css, /\.mobile-instruction\{display:none\}/);
+  assert.match(html, /routes\.css\?v=3/);
 });
 
 test('el resultado permite crear otra obra sin cerrar sesión', async () => {
