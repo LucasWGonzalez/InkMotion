@@ -95,6 +95,7 @@ class InkMotionApp {
     document.getElementById('btn-sign-out').addEventListener('click', async () => { await this.store.signOut(); window.location.reload(); });
     document.getElementById('story-file').addEventListener('change', (event) => this.prepareStory(event));
     document.getElementById('story-video').addEventListener('change', (event) => this.prepareVideo(event));
+    document.getElementById('story-title').addEventListener('input', () => this.handleTitleInput());
     document.getElementById('btn-copy-prompt').addEventListener('click', () => this.copyLoopPrompt());
     document.getElementById('publish-form').addEventListener('submit', (event) => this.publishStory(event));
     document.getElementById('btn-copy-link').addEventListener('click', () => this.copyPublishedLink());
@@ -381,6 +382,7 @@ class InkMotionApp {
     const imageValidation = document.getElementById('image-validation');
     const videoValidation = document.getElementById('video-validation');
     const readyLabel = document.getElementById('media-ready-label');
+    const hasTitle = this.hasValidTitle();
     if (!hasImage || !hasVideo) {
       publish.disabled = true;
       imageValidation.textContent = hasImage ? 'Lista' : 'Pendiente';
@@ -388,7 +390,7 @@ class InkMotionApp {
       videoValidation.textContent = hasVideo ? 'Listo' : 'Pendiente';
       videoValidation.dataset.state = hasVideo ? 'ready' : 'pending';
       readyLabel.textContent = hasImage && !hasVideo ? 'Falta el video loop' : !hasImage && hasVideo ? 'Falta la imagen original' : 'Esperando imagen y video';
-      if (hasImage || hasVideo) this.setBuildState('idle', readyLabel.textContent, hasImage ? 25 : 35);
+      this.setBuildState('idle', readyLabel.textContent, hasImage ? 25 : hasVideo ? 35 : 0);
       return;
     }
     const ratioResult = this.validateMediaRatio();
@@ -396,9 +398,36 @@ class InkMotionApp {
     imageValidation.dataset.state = 'ready';
     videoValidation.textContent = ratioResult.ok ? 'Compatible' : 'Revisar';
     videoValidation.dataset.state = ratioResult.ok ? 'ready' : 'warning';
+    // Keep the action available once both files are valid so a click can explain
+    // a missing title instead of failing silently behind a disabled control.
     publish.disabled = !ratioResult.ok || this.isPublishing;
     readyLabel.textContent = ratioResult.ok ? 'Imagen y video listos para publicar' : 'La imagen y el video no tienen la misma proporción';
-    this.setBuildState(ratioResult.ok ? 'ready' : 'warning', successMessage || (ratioResult.ok ? 'Archivos listos para crear la obra aumentada.' : ratioResult.message), ratioResult.ok ? 45 : 35);
+    const readyMessage = hasTitle ? 'Todo listo para crear la obra aumentada.' : 'Falta el título de la obra para continuar.';
+    this.setBuildState(ratioResult.ok ? (hasTitle ? 'ready' : 'warning') : 'warning', successMessage || (ratioResult.ok ? readyMessage : ratioResult.message), ratioResult.ok ? 45 : 35);
+  }
+
+  hasValidTitle() {
+    return Boolean(document.getElementById('story-title')?.value.trim());
+  }
+
+  handleTitleInput() {
+    const input = document.getElementById('story-title');
+    const error = document.getElementById('title-error');
+    const valid = this.hasValidTitle();
+    input.removeAttribute('aria-invalid');
+    error.hidden = true;
+    if (valid) this.updateMediaReadiness();
+    else if (this.pendingProject?.imageBlob && this.pendingProject?.videoBlob) this.updateMediaReadiness();
+  }
+
+  showTitleError() {
+    const input = document.getElementById('story-title');
+    const error = document.getElementById('title-error');
+    input.setAttribute('aria-invalid', 'true');
+    error.hidden = false;
+    this.setBuildState('error', 'Ingresá el título de la obra para poder publicarla.', 45);
+    input.focus({ preventScroll: true });
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   validateMediaRatio() {
@@ -424,7 +453,12 @@ class InkMotionApp {
 
   async publishStory(event) {
     event.preventDefault();
-    if (!this.pendingProject?.imageBlob || !this.pendingProject?.videoBlob) return;
+    if (!this.hasValidTitle()) { this.showTitleError(); return; }
+    if (!this.pendingProject?.imageBlob || !this.pendingProject?.videoBlob) {
+      this.updateMediaReadiness();
+      this.setBuildState('error', !this.pendingProject?.imageBlob ? 'Subí la imagen original para continuar.' : 'Subí el video loop para continuar.', 0);
+      return;
+    }
     if (!this.validateMediaRatio().ok) { this.updateMediaReadiness(); return; }
     if (this.isPublishing) return;
     this.isPublishing = true;
@@ -435,7 +469,7 @@ class InkMotionApp {
       const id = this.pendingProject.id || crypto.randomUUID();
       this.pendingProject.id = id;
       const publicUrl = `${window.location.origin}/v/${compactProjectId(id)}`;
-      const title = document.getElementById('story-title').value.trim() || 'Obra InkMotion';
+      const title = document.getElementById('story-title').value.trim();
       this.setBuildState('processing', 'Componiendo la Lámina Maestra…', 52);
       const sheet = await this.sheetGenerator.compose({ illustrationUrl: this.pendingProject.imageUrl, publicUrl, title });
       this.pendingProject.masterSheet = sheet;
@@ -477,7 +511,9 @@ class InkMotionApp {
     canvas.getContext('2d').drawImage(sheetCanvas, 0, 0);
     document.getElementById('qr-status').textContent = 'Lámina lista para imprimir. Usá el PDF sin escalar para conservar el tracking.';
     document.getElementById('btn-download-sheet').disabled = false;
-    result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('publish-help').hidden = true;
+    result.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    result.focus({ preventScroll: true });
   }
 
   async downloadMasterSheet() {
