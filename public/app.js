@@ -462,8 +462,16 @@ class InkMotionApp {
     if (!this.validateMediaRatio().ok) { this.updateMediaReadiness(); return; }
     if (this.isPublishing) return;
     this.isPublishing = true;
+    let publicationSucceeded = false;
     this.publicationProgress = 0;
-    document.getElementById('btn-publish').disabled = true;
+    const publishButton = document.getElementById('btn-publish');
+    const publishForm = document.getElementById('publish-form');
+    const publishResult = document.getElementById('publish-result');
+    publishButton.disabled = true;
+    publishButton.textContent = 'Procesando obra…';
+    publishButton.classList.add('is-processing');
+    publishForm.setAttribute('aria-busy', 'true');
+    publishResult.hidden = true;
     this.clearRetry();
     try {
       const id = this.pendingProject.id || crypto.randomUUID();
@@ -483,7 +491,8 @@ class InkMotionApp {
       await this.store.saveProject({ id, title, imageBlob: this.pendingProject.imageBlob, videoBlob: this.pendingProject.videoBlob, targetBlob, config: { contentRect: sheet.contentRect, targetAspect: sheet.contentRect.targetAspect, trackingQuality, video: this.pendingProject.videoMetadata }, onStage: ({ message, progress }) => this.setBuildState('processing', message, progress) });
       this.showPublishResult(id, publicUrl, sheet.canvas);
       await this.loadMyProjects();
-      this.setBuildState('success', 'Publicación lista · lámina, video y marcador AR guardados.', 100);
+      this.setBuildState('success', 'Publicación lista · descargá la Lámina Maestra en PDF.', 100);
+      publicationSucceeded = true;
     } catch (error) {
       console.error('[InkMotion] Falló la publicación.', error);
       const message = this.errorMessage(error, 'No pudimos crear la publicación.');
@@ -491,7 +500,14 @@ class InkMotionApp {
       if (this.isNetworkError(error)) this.offerRetry('publish');
     } finally {
       this.isPublishing = false;
-      this.updateMediaReadiness();
+      publishForm.removeAttribute('aria-busy');
+      publishButton.classList.remove('is-processing');
+      if (publicationSucceeded) {
+        publishButton.hidden = true;
+      } else {
+        publishButton.textContent = 'Crear obra aumentada';
+        this.updateMediaReadiness();
+      }
     }
   }
 
