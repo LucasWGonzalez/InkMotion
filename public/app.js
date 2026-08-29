@@ -1,7 +1,7 @@
 import MindARManager from './core/MindARManager.js';
 import ParallaxEngine from './core/ParallaxEngine.js';
 import ImageProcessor from './core/ImageProcessor.js';
-import ProjectStore from './services/ProjectStore.js';
+import ProjectStore from './services/ProjectStore.js?v=2';
 import EventBus from './utils/EventBus.js';
 import MasterSheetGenerator from './core/MasterSheetGenerator.js?v=5';
 import VideoProcessor from './core/VideoProcessor.js';
@@ -105,7 +105,17 @@ class InkMotionApp {
     document.getElementById('btn-cancel-delete').addEventListener('click', () => this.closeDeleteProjectDialog());
     document.getElementById('btn-confirm-delete').addEventListener('click', () => this.confirmDeleteProject());
     document.getElementById('delete-project-dialog').addEventListener('cancel', () => { this.projectPendingDeletion = null; });
-    const session = await this.store.getSession();
+    const authStatus = document.getElementById('auth-status');
+    const isOAuthReturn = new URLSearchParams(window.location.search).has('code');
+    if (isOAuthReturn) authStatus.textContent = 'Completando el acceso con Google…';
+    let session = null;
+    try {
+      session = await this.store.initializeAuth();
+      authStatus.textContent = '';
+    } catch (error) {
+      console.error('[InkMotion] No se pudo completar Google OAuth.', error);
+      authStatus.textContent = this.errorMessage(error, 'No pudimos completar el acceso con Google. Intentá nuevamente.');
+    }
     this.renderAuthorSession(session);
     if (session) await Promise.all([this.restoreOAuthDraft(), this.loadMyProjects()]);
     this.store.onAuthChange(async (nextSession) => {
