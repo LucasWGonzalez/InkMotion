@@ -12,3 +12,9 @@ test('un fallo de publicación conserva el error visible y permite reintentar', 
   const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(app, /publishButton\.textContent = 'Crear obra aumentada';\s+publishButton\.disabled = false;/);
 });
+
+test('el resultado final usa el JPEG generado sin volver a ejecutar drawImage', async () => {
+  const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(app, /this\.showPublishResult\(id, publicUrl, sheet\.jpegDataUrl\)/);
+  assert.doesNotMatch(app, /drawImage\(sheetCanvas/);
+});
