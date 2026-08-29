@@ -159,7 +159,13 @@ class MindARManager {
       if (featureCount < 35) throw new Error('La imagen tiene pocos puntos reconocibles. Probá otra con más detalles y menos áreas lisas.');
       EventBus.emit('mindar:target-quality', { quality: featureCount < 90 ? 'limited' : 'good', featureCount, contrast: Math.round(visualQuality.contrast) });
       const buffer = await compiler.exportData();
-      return { buffer, blob: new Blob([buffer], { type: 'application/octet-stream' }), featureCount };
+      return {
+        buffer,
+        blob: new Blob([buffer], { type: 'application/octet-stream' }),
+        featureCount,
+        visualQuality,
+        rating: featureCount < 90 ? 'limited' : 'good',
+      };
     } catch (error) {
       const friendly = error instanceof Error ? error : new Error('No se pudo compilar el marcador AR.');
       EventBus.emit('mindar:compilation-error', friendly);
