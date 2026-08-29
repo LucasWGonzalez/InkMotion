@@ -6,6 +6,7 @@ import EventBus from './utils/EventBus.js';
 import MasterSheetGenerator from './core/MasterSheetGenerator.js?v=5';
 import VideoProcessor from './core/VideoProcessor.js';
 import ExperienceRecorder from './core/ExperienceRecorder.js';
+import { renderStoryQR } from './utils/QRGenerator.js';
 
 const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
 const OAUTH_DRAFT_DB = 'inkmotion-oauth-draft';
@@ -102,6 +103,10 @@ class InkMotionApp {
     document.getElementById('publish-form').addEventListener('submit', (event) => this.publishStory(event));
     document.getElementById('btn-copy-link').addEventListener('click', () => this.copyPublishedLink());
     document.getElementById('btn-download-sheet').addEventListener('click', () => this.downloadMasterSheet());
+    document.getElementById('btn-replace-video').addEventListener('click', () => document.getElementById('story-video').click());
+    document.getElementById('btn-new-story').addEventListener('click', () => this.resetCreationFlow());
+    document.getElementById('btn-view-projects').addEventListener('click', () => document.querySelector('.my-projects').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    document.getElementById('btn-open-story').addEventListener('click', (event) => this.handleArTestAction(event));
     document.getElementById('btn-retry').addEventListener('click', () => this.retryLastAction());
     document.getElementById('btn-close-delete').addEventListener('click', () => this.closeDeleteProjectDialog());
     document.getElementById('btn-cancel-delete').addEventListener('click', () => this.closeDeleteProjectDialog());
@@ -405,6 +410,7 @@ class InkMotionApp {
     const readyLabel = document.getElementById('media-ready-label');
     const hasTitle = this.hasValidTitle();
     if (!hasImage || !hasVideo) {
+      this.renderMediaCompatibility(null);
       publish.disabled = true;
       imageValidation.textContent = hasImage ? 'Lista' : 'Pendiente';
       imageValidation.dataset.state = hasImage ? 'ready' : 'pending';
@@ -415,9 +421,10 @@ class InkMotionApp {
       return;
     }
     const ratioResult = this.validateMediaRatio();
+    this.renderMediaCompatibility(ratioResult);
     imageValidation.textContent = 'Lista';
     imageValidation.dataset.state = 'ready';
-    videoValidation.textContent = ratioResult.ok ? 'Compatible' : 'Revisar';
+    videoValidation.textContent = ratioResult.ok ? 'Compatible' : 'No compatible';
     videoValidation.dataset.state = ratioResult.ok ? 'ready' : 'warning';
     // Keep the action available once both files are valid so a click can explain
     // a missing title instead of failing silently behind a disabled control.
@@ -425,6 +432,18 @@ class InkMotionApp {
     readyLabel.textContent = ratioResult.ok ? 'Imagen y video listos para publicar' : 'La imagen y el video no tienen la misma proporción';
     const readyMessage = hasTitle ? 'Todo listo para crear la obra aumentada.' : 'Falta el título de la obra para continuar.';
     this.setBuildState(ratioResult.ok ? (hasTitle ? 'ready' : 'warning') : 'warning', successMessage || (ratioResult.ok ? readyMessage : ratioResult.message), ratioResult.ok ? 45 : 35);
+  }
+
+  renderMediaCompatibility(result) {
+    const error = document.getElementById('media-compatibility-error');
+    const message = document.getElementById('media-compatibility-message');
+    const videoCard = document.querySelector('.video-preview-card');
+    const pairStatus = document.querySelector('.media-pair-status');
+    const incompatible = Boolean(result && !result.ok);
+    error.hidden = !incompatible;
+    videoCard?.classList.toggle('is-incompatible', incompatible);
+    if (pairStatus) pairStatus.dataset.state = incompatible ? 'error' : '';
+    if (incompatible) message.textContent = result.message;
   }
 
   hasValidTitle() {
@@ -538,13 +557,14 @@ class InkMotionApp {
     }
   }
 
-  showPublishResult(id, publicUrl, sheetImageUrl) {
+  async showPublishResult(id, publicUrl, sheetImageUrl) {
     const result = document.getElementById('publish-result');
     result.hidden = false;
     const input = document.getElementById('public-link');
     input.value = publicUrl;
     const open = document.getElementById('btn-open-story');
     open.href = publicUrl;
+    await this.configureArTest(publicUrl);
     const previewWrap = document.getElementById('qr-canvas-wrap');
     previewWrap.hidden = false;
     const preview = document.getElementById('story-sheet-preview');
@@ -555,6 +575,75 @@ class InkMotionApp {
     document.getElementById('publish-help').hidden = true;
     result.scrollIntoView({ behavior: 'smooth', block: 'center' });
     result.focus({ preventScroll: true });
+  }
+
+  isLikelyMobileDevice() {
+    return navigator.maxTouchPoints > 0 && window.matchMedia?.('(pointer: coarse)').matches && window.innerWidth <= 1100;
+  }
+
+  async configureArTest(publicUrl) {
+    const mobile = this.isLikelyMobileDevice();
+    const open = document.getElementById('btn-open-story');
+    const help = document.getElementById('ar-device-help');
+    const desktopGuide = document.getElementById('desktop-ar-guide');
+    open.textContent = mobile ? 'Abrir experiencia AR' : 'Probar en un celular';
+    help.textContent = mobile
+      ? 'Se abrirá la cámara del celular. Permití el acceso y encuadrá la lámina completa.'
+      : 'La experiencia AR está diseñada para apuntar a la lámina desde un celular.';
+    desktopGuide.hidden = mobile;
+    if (!mobile) {
+      try {
+        await renderStoryQR(document.getElementById('desktop-story-qr'), publicUrl, { width: 320, margin: 3 });
+      } catch (error) {
+        console.warn('No se pudo generar el QR de prueba para escritorio.', error);
+        desktopGuide.querySelector('canvas').hidden = true;
+      }
+    }
+  }
+
+  handleArTestAction(event) {
+    if (this.isLikelyMobileDevice()) return;
+    event.preventDefault();
+    document.getElementById('desktop-ar-guide').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  resetCreationFlow() {
+    for (const url of [this.pendingProject?.imageUrl, this.pendingProject?.videoUrl]) {
+      if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+    }
+    this.pendingProject = null;
+    this.lastSelectedFile = null;
+    this.publicationProgress = 0;
+    document.getElementById('publish-form').reset();
+    document.getElementById('story-file').value = '';
+    document.getElementById('story-video').value = '';
+    for (const preview of [document.getElementById('author-preview'), document.getElementById('author-video-preview')]) {
+      preview.pause?.();
+      preview.removeAttribute('src');
+      preview.hidden = true;
+    }
+    document.getElementById('preview-wrap').hidden = true;
+    document.getElementById('image-validation').textContent = 'Pendiente';
+    document.getElementById('image-validation').dataset.state = 'pending';
+    document.getElementById('video-validation').textContent = 'Pendiente';
+    document.getElementById('video-validation').dataset.state = 'pending';
+    document.getElementById('image-metadata').textContent = 'Seleccioná una imagen';
+    document.getElementById('video-metadata').textContent = 'Seleccioná un video';
+    this.renderMediaCompatibility(null);
+    document.getElementById('title-error').hidden = true;
+    document.getElementById('story-title').removeAttribute('aria-invalid');
+    document.getElementById('publish-result').hidden = true;
+    document.getElementById('story-sheet-preview').removeAttribute('src');
+    document.getElementById('btn-download-sheet').disabled = true;
+    const publish = document.getElementById('btn-publish');
+    publish.hidden = false;
+    publish.disabled = true;
+    publish.textContent = 'Crear obra aumentada';
+    document.getElementById('publish-help').hidden = false;
+    document.getElementById('layout-reset')?.click();
+    this.setBuildState('idle', 'Completá el título y subí los dos archivos', 0);
+    document.querySelector('.creator-grid').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => document.getElementById('story-file').focus(), 450);
   }
 
   async downloadMasterSheet() {
