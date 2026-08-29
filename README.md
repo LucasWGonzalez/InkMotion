@@ -5,6 +5,22 @@ InkMotion convierte una imagen y su animación breve en una obra física aumenta
 Producción: https://ink-motion-pied.vercel.app  
 Panel de autor: https://ink-motion-pied.vercel.app/crear
 
+## Versión estable de referencia
+
+La versión validada el **29 de agosto de 2026** conserva funcionando de punta a punta:
+
+- acceso con Google mediante Supabase PKCE, sin bucles de ingreso;
+- restauración del borrador después del login;
+- validación de título, imagen y video;
+- composición clásica o personalizada de la Lámina Maestra;
+- compilación del target MindAR sin errores de `drawImage()`;
+- guardado de la publicación y actualización de **Mis trabajos**;
+- vista final y descarga del PDF;
+- apertura pública desde el QR en el teléfono;
+- cámara, tracking, video AR, sonido, grabación y compartir.
+
+Esta versión cuenta con **17 pruebas automatizadas aprobadas** y una prueba manual completa en teléfono real. La referencia recuperable en GitHub se conserva en la rama `release/stable-2026-08-29`.
+
 ## Casos de uso objetivo
 
 InkMotion está evolucionando para trabajar no sólo con láminas artísticas, sino también con:
@@ -188,6 +204,14 @@ Antes de considerar estable un cambio de maquetación:
 8. Confirmar targetFound/targetLost y estabilidad del video.
 9. Regenerar un proyecto antiguo y comprobar que sigue utilizando el formato clásico.
 10. Regenerar un proyecto nuevo personalizado y comprobar que conserva su layout.
+
+Para cambios que afecten autenticación, publicación o lector, ejecutar además:
+
+```bash
+node --test tests/*.test.mjs
+```
+
+No debe publicarse una nueva versión si falla alguna prueba de autenticación, publicación, biblioteca, descarga, visor o grabación.
 
 ## Desarrollo local
 

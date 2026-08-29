@@ -1,7 +1,7 @@
 INKMOTION - REGISTRO GENERAL DEL PROYECTO
 =========================================
 
-Ultima actualizacion: 28 de agosto de 2026
+Ultima actualizacion: 29 de agosto de 2026
 Repositorio: https://github.com/LucasWGonzalez/InkMotion
 Rama de produccion: master
 Produccion: https://ink-motion-pied.vercel.app
@@ -430,6 +430,21 @@ ETAPA 22 - Preview WYSIWYG corregida
 - El modo clasico se previsualiza con composeLegacy().
 - El modo personalizado usa la imagen real procesada y overlays coordinados.
 
+ETAPA 23 - Estabilizacion integral del flujo
+- Se corrigio la validacion visible del titulo obligatorio.
+- Se restauro el progreso de creacion y el resultado final descargable.
+- La compilacion usa el Blob exportado por MindAR y no el objeto contenedor.
+- La medicion visual recibe una imagen cargada, no una URL en drawImage().
+- La obra vuelve a guardarse y aparecer en Mis trabajos.
+- Google OAuth PKCE conserva la sesion y evita estados duplicados de Auth.
+- Los cambios de sesion se procesan de forma serializada fuera del callback.
+- Se restauro el lector movil con las APIs vigentes de ParallaxEngine y
+  MindARManager.
+- Se reconectaron camara, target.mind, tracking, proyeccion, video, sonido,
+  grabacion y compartir.
+- Se valido manualmente el recorrido completo en telefono real.
+- Suite estable: 17 de 17 pruebas automatizadas aprobadas.
+
 
 15. DECISIONES DE PRODUCTO VIGENTES
 -----------------------------------
@@ -504,6 +519,15 @@ Hitos recientes del Layout Studio:
 - dd79d17  use real legacy sheet for classic preview
 - 6e44171  align layout editor styles with final composition
 
+Hitos de estabilizacion integral (29 de agosto de 2026):
+- PR #15  correccion del callback OAuth PKCE
+- PR #16  uso correcto del Blob compilado por MindAR
+- PR #18  correccion del tipo enviado a canvas.drawImage
+- PR #19  estabilizacion del estado de autenticacion y suite integral
+- PR #20  restauracion completa del lector WebAR movil
+- bb7c27e  codigo funcional validado antes de documentacion
+- release/stable-2026-08-29  referencia recuperable de la version estable
+
 
 19. NOTAS DE MANTENIMIENTO
 -------------------------
@@ -517,5 +541,10 @@ Hitos recientes del Layout Studio:
 - La salida impresa debe ser la fuente de verdad para el target AR.
 - Conservar compatibilidad con proyectos que no contienen config.layout.
 - Cerrar cada cambio importante con una prueba real en dispositivo movil.
+- Ejecutar node --test tests/*.test.mjs antes de integrar cambios en master.
+- Crear una rama release/stable-AAAA-MM-DD para cada version validada de punta a punta.
+- No reutilizar nombres de version: cada referencia estable debe ser inmutable.
+- Para volver a una version, crear una rama nueva desde la referencia estable; no
+  reescribir master ni borrar el historial.
 
 FIN DEL REGISTRO
