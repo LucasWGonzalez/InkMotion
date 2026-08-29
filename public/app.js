@@ -494,7 +494,7 @@ class InkMotionApp {
       this.setBuildState('processing', 'Validando calidad de tracking…', 60);
       const manager = new MindARManager();
       const trackingQuality = await manager.measureVisualQuality(sheet.imageUrl);
-      const targetBlob = await manager.compileTarget(sheet.imageUrl, ({ progress }) => this.setBuildState('processing', progress < 85 ? 'Compilando marcador AR…' : 'Terminando marcador AR…', 60 + Math.round(progress * 0.06)));
+      const { blob: targetBlob } = await manager.compileTarget(sheet.imageUrl);
       const pdfBlob = await this.sheetGenerator.createPdf(sheet.jpegDataUrl, sheet.pageSizeMm);
       this.pendingProject.pdfBlob = pdfBlob;
       this.setBuildState('processing', `Tracking ${trackingQuality.rating === 'good' ? 'fuerte' : 'aceptable'} · preparando subida…`, 67);
@@ -516,7 +516,7 @@ class InkMotionApp {
         publishButton.hidden = true;
       } else {
         publishButton.textContent = 'Crear obra aumentada';
-        this.updateMediaReadiness();
+        publishButton.disabled = false;
       }
     }
   }
