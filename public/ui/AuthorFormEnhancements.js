@@ -42,11 +42,11 @@ function ensurePublishedPreview() {
   if (!result) return;
   const sync = () => {
     if (result.hidden) return;
-    const canvas = el('story-qr');
+    const preview = el('story-sheet-preview');
     const wrap = el('qr-canvas-wrap');
     const download = el('btn-download-sheet');
-    if (canvas?.width && canvas?.height) {
-      canvas.hidden = false;
+    if (preview?.src) {
+      preview.hidden = false;
       if (wrap) wrap.hidden = false;
       if (download) download.disabled = false;
     }
