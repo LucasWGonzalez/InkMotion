@@ -591,105 +591,113 @@ class InkMotionApp {
   async startReader(id) {
     document.body.dataset.route = 'reader';
     document.getElementById('reader-view').hidden = false;
-    const statusText = document.getElementById('reader-status-text');
+    this.setReaderStatus('Cargando obra…', 'loading');
     try {
-      statusText.textContent = 'Buscando la obra…';
       const project = await this.store.getProject(id);
-      if (!project) throw new Error('Esta obra no existe o ya no está disponible.');
+      if (!project) return this.showFatal('Esta obra no existe o todavía no fue publicada.');
+      document.title = `${project.title} · InkMotion`;
       document.getElementById('reader-title').textContent = project.title;
       document.getElementById('info-title').textContent = project.title;
-      const manager = new MindARManager();
-      const engine = new ParallaxEngine(document.getElementById('ar-overlay'));
-      this.experienceRecorder = new ExperienceRecorder({ videoElement: document.getElementById('video-stream'), canvasProvider: () => engine.renderer?.domElement || null });
-      const storedRect = project.config?.contentRect || { x: 0, y: 0, width: 1, height: 1, targetAspect: 1 };
-      await engine.load(project.imageUrl, project.videoUrl, storedRect);
-      await manager.start({ container: document.getElementById('camera-feed'), targetUrl: project.targetUrl, targetIndex: 0, onAnchor: (group) => engine.attachToAnchor(group) });
-      this.bindReaderControls(manager, engine, project);
-      statusText.textContent = 'Buscando la lámina…';
+      document.getElementById('btn-info').addEventListener('click', () => document.getElementById('story-info').showModal());
+      document.getElementById('btn-close-info').addEventListener('click', () => document.getElementById('story-info').close());
+      document.getElementById('btn-camera-mode').addEventListener('click', () => this.toggleReaderMode());
+      if (!project.videoUrl) throw new Error('Esta publicación pertenece a una versión anterior de InkMotion. Volvé a publicarla agregando su video loop.');
+      this.parallax = new ParallaxEngine({ container: '#ar-overlay', contentRect: project.config?.contentRect });
+      await this.parallax.init();
+      await this.parallax.setTargetVideo(project.imageUrl, project.videoUrl);
+      this.mindAR = new MindARManager({ video: '#video-stream' });
+      const ready = await this.mindAR.init();
+      if (!ready) throw new Error('No se pudo iniciar la cámara. Revisá sus permisos.');
+      this.setReaderStatus('Verificando marcador AR…', 'loading');
+      await this.mindAR.setCompiledTarget(project.targetUrl);
+      this.setupExperienceRecorder();
+      this.setReaderStatus('Buscando ilustración…', 'scanning');
     } catch (error) {
-      console.error(error);
+      console.error('[InkMotion/Reader] No se pudo abrir la experiencia.', error);
+      this.parallax?.stop();
+      this.mindAR?.stop();
       this.showFatal(this.errorMessage(error, 'No pudimos abrir esta experiencia.'), '/crear', 'Crear una obra');
     }
   }
 
-  bindReaderControls(manager, engine, project) {
-    document.getElementById('btn-camera-mode').addEventListener('click', () => engine.toggleCameraOnly());
-    document.getElementById('btn-info').addEventListener('click', () => document.getElementById('story-info').showModal());
-    document.getElementById('btn-close-info').addEventListener('click', () => document.getElementById('story-info').close());
-    document.getElementById('btn-sound').addEventListener('click', async () => {
-      const enabled = await engine.toggleSound();
-      const button = document.getElementById('btn-sound');
-      button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-      button.setAttribute('aria-label', enabled ? 'Silenciar sonido' : 'Activar sonido');
-    });
-    const capture = document.getElementById('capture-controls');
-    if (this.experienceRecorder?.supported) {
-      capture.hidden = false;
-      const record = document.getElementById('btn-record');
-      record.disabled = false;
-      record.addEventListener('click', () => this.toggleRecording());
-      document.getElementById('btn-download-recording').addEventListener('click', () => this.downloadRecording());
-      document.getElementById('btn-share-recording').addEventListener('click', () => this.shareRecording());
-      document.getElementById('btn-discard-recording').addEventListener('click', () => this.discardRecording());
-    }
-    EventBus.on('target:found', () => {
-      document.getElementById('reader-status').dataset.state = 'found';
-      document.getElementById('reader-status-text').textContent = 'La obra cobró vida';
-      if (navigator.vibrate) navigator.vibrate(35);
-    });
-    EventBus.on('target:lost', () => {
-      document.getElementById('reader-status').dataset.state = 'searching';
-      document.getElementById('reader-status-text').textContent = 'Volvé a encuadrar la lámina';
-    });
+  toggleReaderMode() {
+    this.readerCameraOnly = !this.readerCameraOnly;
+    this.parallax?.setPreviewMode(this.readerCameraOnly ? 'camera' : '3d');
+    document.getElementById('btn-camera-mode').textContent = this.readerCameraOnly ? 'Ver efecto AR' : 'Solo cámara';
   }
 
-  async toggleRecording() {
-    const button = document.getElementById('btn-record');
-    if (!this.experienceRecorder?.isRecording) {
-      try {
-        await this.experienceRecorder.start();
-        button.classList.add('is-recording');
-        button.setAttribute('aria-label', 'Detener grabación');
-        this.startRecordingClock();
-      } catch (error) { console.error('No se pudo iniciar la grabación.', error); }
-      return;
-    }
+  setupExperienceRecorder() {
+    if (!ExperienceRecorder.isSupported()) return;
+    const sources = this.parallax.getCaptureSources();
+    this.experienceRecorder = new ExperienceRecorder({
+      cameraVideo: document.getElementById('video-stream'),
+      arCanvas: sources.arCanvas,
+      animatedVideo: sources.animatedVideo,
+      viewport: document.getElementById('reader-view'),
+    });
+    this.removeRecorderFrameListener = this.parallax.addFrameListener(() => {
+      if (this.experienceRecorder?.isRecording()) this.experienceRecorder.drawFrame();
+    });
+    document.getElementById('capture-controls').hidden = false;
+    document.body.classList.add('capture-available');
+    document.getElementById('btn-record').addEventListener('click', () => this.toggleExperienceRecording());
+    document.getElementById('btn-sound').addEventListener('click', () => this.toggleExperienceSound());
+    document.getElementById('btn-download-recording').addEventListener('click', () => this.downloadExperienceRecording());
+    document.getElementById('btn-share-recording').addEventListener('click', () => this.shareExperienceRecording());
+    document.getElementById('btn-discard-recording').addEventListener('click', () => this.closeExperienceRecording());
+    document.getElementById('recording-result').addEventListener('close', () => this.closeExperienceRecording(false));
+  }
+
+  async toggleExperienceSound() {
+    const button = document.getElementById('btn-sound');
     try {
-      this.recordingResult = await this.experienceRecorder.stop();
-      button.classList.remove('is-recording');
-      button.setAttribute('aria-label', 'Iniciar grabación');
-      this.stopRecordingClock();
-      const preview = document.getElementById('recording-preview');
-      preview.src = this.recordingResult.url;
-      document.getElementById('recording-result').showModal();
-    } catch (error) { console.error('No se pudo finalizar la grabación.', error); }
+      const enabled = await this.experienceRecorder.setSoundEnabled(button.getAttribute('aria-pressed') !== 'true');
+      button.setAttribute('aria-pressed', `${enabled}`);
+      button.setAttribute('aria-label', enabled ? 'Silenciar animación' : 'Activar sonido');
+      button.classList.toggle('is-active', enabled);
+    } catch (error) {
+      console.warn('[InkMotion/Audio] No se pudo activar el sonido.', error);
+      this.setReaderStatus('Este navegador no pudo activar el sonido.', 'warning');
+    }
   }
 
-  startRecordingClock() {
-    this.recordingStartedAt = Date.now();
-    const time = document.getElementById('recording-time');
-    const tick = () => {
-      if (!this.experienceRecorder?.isRecording) return;
-      const seconds = Math.floor((Date.now() - this.recordingStartedAt) / 1000);
-      time.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-      time.dateTime = `PT${seconds}S`;
-      this.recordingTimer = window.setTimeout(tick, 500);
-    };
-    tick();
+  async toggleExperienceRecording() {
+    const button = document.getElementById('btn-record');
+    try {
+      if (this.experienceRecorder.isRecording()) {
+        button.disabled = true;
+        this.experienceRecorder.stop();
+      } else {
+        await this.experienceRecorder.start();
+      }
+    } catch (error) {
+      console.error('[InkMotion/Recorder] No se pudo iniciar la grabación.', error);
+      this.setReaderStatus(error.message || 'No se pudo iniciar la grabación.', 'error');
+      button.disabled = false;
+    }
   }
 
-  stopRecordingClock() {
-    window.clearTimeout(this.recordingTimer);
-    const time = document.getElementById('recording-time');
-    time.textContent = '00:00';
-    time.dateTime = 'PT0S';
+  showExperienceRecording(result) {
+    this.closeExperienceRecording(false);
+    this.recordingResult = { ...result, url: URL.createObjectURL(result.blob) };
+    document.getElementById('recording-preview').src = this.recordingResult.url;
+    const shareButton = document.getElementById('btn-share-recording');
+    const file = this.recordingFile();
+    shareButton.hidden = !(navigator.share && navigator.canShare?.({ files: [file] }));
+    document.getElementById('recording-result').showModal();
   }
 
-  downloadRecording() {
-    if (!this.recordingResult) return;
+  recordingFile() {
+    if (!this.recordingResult) return null;
+    return new File([this.recordingResult.blob], this.recordingFilename(this.recordingResult.extension), { type: this.recordingResult.type });
+  }
+
+  downloadExperienceRecording() {
+    const file = this.recordingFile();
+    if (!file || !this.recordingResult?.url) return;
     const link = document.createElement('a');
     link.href = this.recordingResult.url;
-    link.download = this.recordingFilename(this.recordingResult.extension);
+    link.download = file.name;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -703,21 +711,12 @@ class InkMotionApp {
     return `InkMotion_AR_${day}_${time}.${extension}`;
   }
 
-  async shareRecording() {
+  async shareExperienceRecording() {
     const note = document.getElementById('recording-note');
-    if (!this.recordingResult) return;
-    if (!navigator.share || !navigator.canShare) {
-      note.textContent = 'Este navegador no permite compartir archivos directamente. Usá Guardar video y compartilo desde tu galería o gestor de archivos.';
-      return;
-    }
+    const file = this.recordingFile();
+    if (!file) return;
     try {
-      const shareType = this.recordingResult.extension === 'mp4' ? 'video/mp4' : 'video/webm';
-      const file = new File([this.recordingResult.blob], this.recordingFilename(this.recordingResult.extension), { type: shareType });
-      if (!navigator.canShare({ files: [file] })) {
-        note.textContent = 'Este dispositivo no admite compartir este archivo directamente. Usá Guardar video.';
-        return;
-      }
-      await navigator.share({ files: [file] });
+      await navigator.share({ files: [file], title: 'Mi experiencia InkMotion' });
       note.textContent = 'Se abrió el menú de compartir del dispositivo.';
     } catch (error) {
       if (error?.name === 'AbortError') { note.textContent = 'Compartir cancelado.'; return; }
@@ -726,22 +725,82 @@ class InkMotionApp {
     }
   }
 
-  discardRecording() {
+  closeExperienceRecording(closeDialog = true) {
     const dialog = document.getElementById('recording-result');
-    if (dialog.open) dialog.close();
+    const preview = document.getElementById('recording-preview');
+    preview?.pause();
+    preview?.removeAttribute('src');
     if (this.recordingResult?.url) URL.revokeObjectURL(this.recordingResult.url);
     this.recordingResult = null;
-    document.getElementById('recording-preview').removeAttribute('src');
     document.getElementById('recording-note').textContent = 'La grabación todavía no está guardada. Podés guardarla o compartirla. No se sube a InkMotion.';
+    if (closeDialog && dialog?.open) dialog.close();
+  }
+
+  formatRecordingTime(seconds) {
+    const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const remainder = (seconds % 60).toString().padStart(2, '0');
+    return `${minutes}:${remainder}`;
   }
 
   bindTrackingEvents() {
-    EventBus.on('mindar:status', ({ state, message }) => {
-      const reader = document.getElementById('reader-status');
-      if (!reader) return;
-      reader.dataset.state = state;
-      document.getElementById('reader-status-text').textContent = message;
+    EventBus.on('mindar:target-found', () => {
+      window.clearTimeout(this.readerLostTimer);
+      this.readerLostTimer = null;
+      this.parallax?.onTargetFound();
+      document.getElementById('reader-view')?.classList.add('target-found');
+      this.setReaderStatus('La obra cobró vida', 'found');
+      const recordButton = document.getElementById('btn-record');
+      if (recordButton) recordButton.disabled = false;
+      navigator.vibrate?.(35);
     });
+    EventBus.on('mindar:target-lost', () => {
+      window.clearTimeout(this.readerLostTimer);
+      this.readerLostTimer = window.setTimeout(() => {
+        this.parallax?.onTargetLost();
+        document.getElementById('reader-view')?.classList.remove('target-found');
+        this.setReaderStatus('Encuadrá la lámina completa', 'lost');
+        const recordButton = document.getElementById('btn-record');
+        if (recordButton && !this.experienceRecorder?.isRecording()) recordButton.disabled = true;
+      }, 400);
+    });
+    EventBus.on('mindar:target-update', (data) => this.parallax?.updateWorldAnchor(data));
+    EventBus.on('mindar:projection-ready', (data) => { this.parallax?.setProjectionMatrix(data.projectionMatrix); this.parallax?.setVideoViewport(data); });
+    EventBus.on('mindar:video-ready', (data) => this.parallax?.setVideoViewport(data));
+    EventBus.on('mindar:target-download', ({ state, error }) => {
+      if (state === 'downloading') this.setReaderStatus('Descargando marcador AR…', 'loading');
+      else if (state === 'ready') this.setReaderStatus('Marcador listo · buscando ilustración…', 'scanning');
+      else if (state === 'error') this.setReaderStatus(error?.message || 'No se pudo descargar el marcador AR.', 'error');
+    });
+    EventBus.on('mindar:scan-timeout', ({ message }) => this.setReaderStatus(message, 'warning'));
+    EventBus.on('mindar:processing-error', (error) => this.setReaderStatus(error?.message || 'El motor AR interrumpió el procesamiento.', 'error'));
+    EventBus.on('parallax:webgl-error', (error) => this.setReaderStatus(error?.message || 'WebGL dejó de responder.', 'error'));
+    EventBus.on('parallax:video-error', () => this.setReaderStatus('Tocá la pantalla para activar el video. Si no aparece, usá un MP4 H.264.', 'warning'));
+    EventBus.on('recorder:state', ({ state }) => {
+      const button = document.getElementById('btn-record');
+      const controls = document.getElementById('capture-controls');
+      if (!button || !controls) return;
+      const recording = state === 'recording';
+      controls.classList.toggle('is-recording', recording);
+      button.disabled = false;
+      button.setAttribute('aria-label', recording ? 'Detener grabación' : 'Iniciar grabación');
+      if (!recording) document.getElementById('recording-time').textContent = '00:00';
+    });
+    EventBus.on('recorder:tick', ({ seconds }) => {
+      const time = document.getElementById('recording-time');
+      if (!time) return;
+      time.textContent = this.formatRecordingTime(seconds);
+      time.dateTime = `PT${seconds}S`;
+    });
+    EventBus.on('recorder:complete', (result) => this.showExperienceRecording(result));
+    EventBus.on('recorder:error', (error) => this.setReaderStatus(error?.message || 'La grabación fue interrumpida por el dispositivo.', 'warning'));
+    EventBus.on('recorder:audio-warning', () => this.setReaderStatus('La grabación continuará sin audio en este dispositivo.', 'warning'));
+  }
+
+  setReaderStatus(message, state) {
+    const status = document.getElementById('reader-status');
+    if (!status) return;
+    status.dataset.state = state;
+    document.getElementById('reader-status-text').textContent = message;
   }
 
   setBuildState(state, message, progress) {
