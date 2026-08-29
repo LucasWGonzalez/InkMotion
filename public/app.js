@@ -6,7 +6,6 @@ import EventBus from './utils/EventBus.js';
 import MasterSheetGenerator from './core/MasterSheetGenerator.js?v=5';
 import VideoProcessor from './core/VideoProcessor.js';
 import ExperienceRecorder from './core/ExperienceRecorder.js';
-import { renderStoryQR } from './utils/QRGenerator.js';
 
 const NETWORK_ERROR_MESSAGE = 'Error de conexión con el motor o Supabase. Verifica tu red o el tamaño de la imagen.';
 const OAUTH_DRAFT_DB = 'inkmotion-oauth-draft';
@@ -106,7 +105,6 @@ class InkMotionApp {
     document.getElementById('btn-replace-video').addEventListener('click', () => document.getElementById('story-video').click());
     document.getElementById('btn-new-story').addEventListener('click', () => this.resetCreationFlow());
     document.getElementById('btn-view-projects').addEventListener('click', () => document.querySelector('.my-projects').scrollIntoView({ behavior: 'smooth', block: 'start' }));
-    document.getElementById('btn-open-story').addEventListener('click', (event) => this.handleArTestAction(event));
     document.getElementById('btn-retry').addEventListener('click', () => this.retryLastAction());
     document.getElementById('btn-close-delete').addEventListener('click', () => this.closeDeleteProjectDialog());
     document.getElementById('btn-cancel-delete').addEventListener('click', () => this.closeDeleteProjectDialog());
@@ -562,9 +560,6 @@ class InkMotionApp {
     result.hidden = false;
     const input = document.getElementById('public-link');
     input.value = publicUrl;
-    const open = document.getElementById('btn-open-story');
-    open.href = publicUrl;
-    await this.configureArTest(publicUrl);
     const previewWrap = document.getElementById('qr-canvas-wrap');
     previewWrap.hidden = false;
     const preview = document.getElementById('story-sheet-preview');
@@ -575,36 +570,6 @@ class InkMotionApp {
     document.getElementById('publish-help').hidden = true;
     result.scrollIntoView({ behavior: 'smooth', block: 'center' });
     result.focus({ preventScroll: true });
-  }
-
-  isLikelyMobileDevice() {
-    return navigator.maxTouchPoints > 0 && window.matchMedia?.('(pointer: coarse)').matches && window.innerWidth <= 1100;
-  }
-
-  async configureArTest(publicUrl) {
-    const mobile = this.isLikelyMobileDevice();
-    const open = document.getElementById('btn-open-story');
-    const help = document.getElementById('ar-device-help');
-    const desktopGuide = document.getElementById('desktop-ar-guide');
-    open.textContent = mobile ? 'Abrir experiencia AR' : 'Probar en un celular';
-    help.textContent = mobile
-      ? 'Se abrirá la cámara del celular. Permití el acceso y encuadrá la lámina completa.'
-      : 'La experiencia AR está diseñada para apuntar a la lámina desde un celular.';
-    desktopGuide.hidden = mobile;
-    if (!mobile) {
-      try {
-        await renderStoryQR(document.getElementById('desktop-story-qr'), publicUrl, { width: 320, margin: 3 });
-      } catch (error) {
-        console.warn('No se pudo generar el QR de prueba para escritorio.', error);
-        desktopGuide.querySelector('canvas').hidden = true;
-      }
-    }
-  }
-
-  handleArTestAction(event) {
-    if (this.isLikelyMobileDevice()) return;
-    event.preventDefault();
-    document.getElementById('desktop-ar-guide').scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   resetCreationFlow() {
