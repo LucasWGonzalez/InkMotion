@@ -7,19 +7,23 @@ Panel de autor: https://ink-motion-pied.vercel.app/crear
 
 ## Versión estable de referencia
 
+**Versión:** MVP estable 2026-08-29.2
+
 La versión validada el **29 de agosto de 2026** conserva funcionando de punta a punta:
 
 - acceso con Google mediante Supabase PKCE, sin bucles de ingreso;
 - restauración del borrador después del login;
-- validación de título, imagen y video;
+- validación visible y accionable de título, imagen, video y compatibilidad de proporciones;
 - composición clásica o personalizada de la Lámina Maestra;
 - compilación del target MindAR sin errores de `drawImage()`;
 - guardado de la publicación y actualización de **Mis trabajos**;
-- vista final y descarga del PDF;
+- progreso de creación, vista final y descarga del PDF;
+- creación consecutiva mediante **Crear una nueva obra** sin cerrar sesión;
+- instrucciones de prueba que utilizan únicamente el QR incluido en la lámina, sin QR ni botones redundantes;
 - apertura pública desde el QR en el teléfono;
 - cámara, tracking, video AR, sonido, grabación y compartir.
 
-Esta versión cuenta con **17 pruebas automatizadas aprobadas** y una prueba manual completa en teléfono real. La referencia recuperable en GitHub se conserva en la rama `release/stable-2026-08-29`.
+Esta versión cuenta con **20 pruebas automatizadas aprobadas** y una prueba manual completa en teléfono real. La referencia recuperable de esta revisión se conserva en la rama `release/stable-2026-08-29-v2`. La rama anterior `release/stable-2026-08-29` permanece intacta.
 
 ## Casos de uso objetivo
 
