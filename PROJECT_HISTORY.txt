@@ -443,7 +443,23 @@ ETAPA 23 - Estabilizacion integral del flujo
 - Se reconectaron camara, target.mind, tracking, proyeccion, video, sonido,
   grabacion y compartir.
 - Se valido manualmente el recorrido completo en telefono real.
-- Suite estable: 17 de 17 pruebas automatizadas aprobadas.
+- Suite estable inicial: 17 de 17 pruebas automatizadas aprobadas.
+
+
+ETAPA 24 - Cierre UX del flujo basico
+- La incompatibilidad entre imagen y video queda marcada visualmente y explica
+  como corregirla mediante Cambiar video.
+- El resultado final conserva la vista completa y la descarga PDF.
+- Se incorpora Crear una nueva obra sin cerrar la sesion.
+- Se mantiene el acceso directo a Mis trabajos.
+- Se elimina el QR adicional del resultado por ser redundante con el QR ya
+  incorporado en la Lamina Maestra.
+- Se elimina el boton de prueba AR que podia abrir la camara sin una lamina
+  disponible en otra superficie.
+- Escritorio indica escanear el QR incluido en la vista previa.
+- Movil explica que la lamina debe imprimirse o abrirse en otra pantalla.
+- Suite consolidada: 20 de 20 pruebas automatizadas aprobadas.
+- Version documentada: MVP estable 2026-08-29.2.
 
 
 15. DECISIONES DE PRODUCTO VIGENTES
@@ -526,7 +542,13 @@ Hitos de estabilizacion integral (29 de agosto de 2026):
 - PR #19  estabilizacion del estado de autenticacion y suite integral
 - PR #20  restauracion completa del lector WebAR movil
 - bb7c27e  codigo funcional validado antes de documentacion
-- release/stable-2026-08-29  referencia recuperable de la version estable
+- release/stable-2026-08-29  referencia recuperable de la primera version estable
+- PR #21  validacion visible, publicacion y continuidad del flujo de autor
+- PR #22  mensajes de compatibilidad y orientacion inicial para prueba AR
+- PR #23  correccion visual del QR auxiliar en escritorio
+- PR #24  eliminacion del QR y boton AR redundantes
+- a121e09  cierre funcional y UX previo a documentacion
+- release/stable-2026-08-29-v2  MVP estable documentado con suite 20/20
 
 
 19. NOTAS DE MANTENIMIENTO
