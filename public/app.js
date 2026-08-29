@@ -499,8 +499,8 @@ class InkMotionApp {
       this.pendingProject.pdfBlob = pdfBlob;
       this.setBuildState('processing', `Tracking ${trackingQuality.rating === 'good' ? 'fuerte' : 'aceptable'} · preparando subida…`, 67);
       await this.store.saveProject({ id, title, imageBlob: this.pendingProject.imageBlob, videoBlob: this.pendingProject.videoBlob, targetBlob, config: { contentRect: sheet.contentRect, targetAspect: sheet.contentRect.targetAspect, trackingQuality, video: this.pendingProject.videoMetadata }, onStage: ({ message, progress }) => this.setBuildState('processing', message, progress) });
-      this.showPublishResult(id, publicUrl, sheet.canvas);
       await this.loadMyProjects();
+      this.showPublishResult(id, publicUrl, sheet.jpegDataUrl);
       this.setBuildState('success', 'Publicación lista · descargá la Lámina Maestra en PDF.', 100);
       publicationSucceeded = true;
     } catch (error) {
@@ -521,7 +521,7 @@ class InkMotionApp {
     }
   }
 
-  showPublishResult(id, publicUrl, sheetCanvas) {
+  showPublishResult(id, publicUrl, sheetImageUrl) {
     const result = document.getElementById('publish-result');
     result.hidden = false;
     const input = document.getElementById('public-link');
@@ -530,11 +530,9 @@ class InkMotionApp {
     open.href = publicUrl;
     const previewWrap = document.getElementById('qr-canvas-wrap');
     previewWrap.hidden = false;
-    const canvas = document.getElementById('story-qr');
-    canvas.hidden = false;
-    canvas.width = sheetCanvas.width;
-    canvas.height = sheetCanvas.height;
-    canvas.getContext('2d').drawImage(sheetCanvas, 0, 0);
+    const preview = document.getElementById('story-sheet-preview');
+    preview.src = sheetImageUrl;
+    preview.hidden = false;
     document.getElementById('qr-status').textContent = 'Lámina lista para imprimir. Usá el PDF sin escalar para conservar el tracking.';
     document.getElementById('btn-download-sheet').disabled = false;
     document.getElementById('publish-help').hidden = true;
