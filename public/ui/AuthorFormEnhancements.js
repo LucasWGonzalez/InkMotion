@@ -37,75 +37,6 @@ function installVersionedDownloads() {
   };
 }
 
-function mediaReady() {
-  return el('image-validation')?.dataset.state === 'ready'
-    && el('video-validation')?.dataset.state === 'ready';
-}
-
-function titleReady() {
-  return Boolean(el('story-title')?.value?.trim());
-}
-
-function syncPublishButton() {
-  const button = el('btn-publish');
-  const title = el('story-title');
-  if (!button || !title) return;
-  // Only gate author readiness here. app.js owns the temporary disabled state while publishing.
-  button.disabled = !(titleReady() && mediaReady());
-  button.setAttribute('aria-disabled', String(button.disabled));
-  title.setAttribute('aria-required', 'true');
-}
-
-function showTitleRequirement() {
-  const title = el('story-title');
-  const build = el('build-status');
-  const label = el('build-label');
-  if (!title || titleReady()) return false;
-  if (build) build.dataset.state = 'warning';
-  if (label) label.textContent = 'Escribí un título para crear la obra aumentada.';
-  title.focus();
-  title.reportValidity();
-  return true;
-}
-
-function installTitleGuard() {
-  const title = el('story-title');
-  const form = el('publish-form');
-  const button = el('btn-publish');
-  if (!title || !form || !button) return;
-
-  title.required = true;
-  title.addEventListener('input', syncPublishButton);
-  title.addEventListener('change', syncPublishButton);
-
-  form.addEventListener('submit', (event) => {
-    if (!showTitleRequirement()) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    syncPublishButton();
-  }, true);
-
-  button.addEventListener('click', () => {
-    if (!titleReady() || !mediaReady()) return;
-    const label = el('build-label');
-    if (label) label.textContent = 'Iniciando publicación…';
-  }, true);
-
-  ['image-validation', 'video-validation'].forEach((id) => {
-    const node = el(id);
-    if (!node) return;
-    new MutationObserver(syncPublishButton).observe(node, {
-      attributes: true,
-      attributeFilter: ['data-state'],
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-  });
-
-  syncPublishButton();
-}
-
 function ensurePublishedPreview() {
   const result = el('publish-result');
   if (!result) return;
@@ -126,7 +57,6 @@ function ensurePublishedPreview() {
 
 function start() {
   installVersionedDownloads();
-  installTitleGuard();
   ensurePublishedPreview();
 }
 
