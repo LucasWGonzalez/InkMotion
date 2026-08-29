@@ -1,7 +1,7 @@
 import MindARManager from './core/MindARManager.js?v=2';
 import ParallaxEngine from './core/ParallaxEngine.js';
 import ImageProcessor from './core/ImageProcessor.js';
-import ProjectStore from './services/ProjectStore.js?v=2';
+import ProjectStore from './services/ProjectStore.js?v=3';
 import EventBus from './utils/EventBus.js';
 import MasterSheetGenerator from './core/MasterSheetGenerator.js?v=5';
 import VideoProcessor from './core/VideoProcessor.js';
@@ -71,6 +71,8 @@ class InkMotionApp {
     this.recordingResult = null;
     this.myProjects = [];
     this.projectPendingDeletion = null;
+    this.authorSessionUserId = null;
+    this.authorSessionSync = Promise.resolve();
     this.bindTrackingEvents();
     this.start();
   }
@@ -116,12 +118,21 @@ class InkMotionApp {
       console.error('[InkMotion] No se pudo completar Google OAuth.', error);
       authStatus.textContent = this.errorMessage(error, 'No pudimos completar el acceso con Google. Intentá nuevamente.');
     }
+    await this.syncAuthorSession(session);
+    this.store.onAuthChange((event, nextSession) => {
+      if (event === 'INITIAL_SESSION') return;
+      this.authorSessionSync = this.authorSessionSync
+        .then(() => this.syncAuthorSession(nextSession))
+        .catch((error) => console.error('[InkMotion] Falló la sincronización de la sesión.', error));
+    });
+  }
+
+  async syncAuthorSession(session) {
+    const nextUserId = session?.user?.id || null;
+    if (nextUserId === this.authorSessionUserId) return;
+    this.authorSessionUserId = nextUserId;
     this.renderAuthorSession(session);
     if (session) await Promise.all([this.restoreOAuthDraft(), this.loadMyProjects()]);
-    this.store.onAuthChange(async (nextSession) => {
-      this.renderAuthorSession(nextSession);
-      if (nextSession) await Promise.all([this.restoreOAuthDraft(), this.loadMyProjects()]);
-    });
   }
 
   renderAuthorSession(session) {
@@ -678,10 +689,18 @@ class InkMotionApp {
     if (!this.recordingResult) return;
     const link = document.createElement('a');
     link.href = this.recordingResult.url;
-    link.download = `InkMotion-AR.${this.recordingResult.extension}`;
+    link.download = this.recordingFilename(this.recordingResult.extension);
     document.body.appendChild(link);
     link.click();
     link.remove();
+    document.getElementById('recording-note').textContent = 'Descarga iniciada. Buscá el video en la carpeta Descargas.';
+  }
+
+  recordingFilename(extension) {
+    const now = new Date();
+    const day = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const time = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    return `InkMotion_AR_${day}_${time}.${extension}`;
   }
 
   async shareRecording() {
@@ -693,7 +712,7 @@ class InkMotionApp {
     }
     try {
       const shareType = this.recordingResult.extension === 'mp4' ? 'video/mp4' : 'video/webm';
-      const file = new File([this.recordingResult.blob], `InkMotion-AR.${this.recordingResult.extension}`, { type: shareType });
+      const file = new File([this.recordingResult.blob], this.recordingFilename(this.recordingResult.extension), { type: shareType });
       if (!navigator.canShare({ files: [file] })) {
         note.textContent = 'Este dispositivo no admite compartir este archivo directamente. Usá Guardar video.';
         return;
