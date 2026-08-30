@@ -82,10 +82,18 @@ function installStepHierarchy() {
   }
 }
 
+function installHeroTypography() {
+  const title = document.querySelector('.hero-copy h1');
+  if (!title || title.dataset.typographyReady) return;
+  title.dataset.typographyReady = 'true';
+  title.innerHTML = 'Tu obra <strong>cobra vida</strong><span>sobre el papel</span>';
+}
+
 function start() {
   installLiquidInkBackground();
   installVersionedDownloads();
   ensurePublishedPreview();
+  installHeroTypography();
   installStepHierarchy();
   if (el('btn-view-projects')) el('btn-view-projects').textContent = 'Ver Mis obras';
 }
