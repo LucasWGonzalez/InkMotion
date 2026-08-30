@@ -1,5 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+
 :root{
   --font-ui:"Avenir Next","Segoe UI Variable","Segoe UI",Inter,Arial,sans-serif;
+  --font-display:"Space Grotesk",var(--font-ui);
   --ink-bg:#0b1020;
   --ink-surface:#151b30;
   --ink-surface-2:#1b2239;
@@ -55,13 +58,15 @@ body[data-route="author"] main,body[data-route="author"] .creator-footer{positio
 .hero-copy h1{
   max-width:820px;
   margin:13px 0 19px;
-  font-family:var(--font-ui);
+  font-family:var(--font-display);
   font-size:clamp(48px,6.7vw,82px);
-  font-weight:720;
-  line-height:.98;
-  letter-spacing:-.055em;
+  font-weight:600;
+  line-height:.96;
+  letter-spacing:-.06em;
 }
-.hero-copy h1 em{color:#cabaff;font-family:inherit;font-style:normal;font-weight:520}
+.hero-copy h1 strong{position:relative;display:inline-block;color:inherit;font-weight:700;z-index:0}
+.hero-copy h1 strong::after{content:"";position:absolute;left:2%;right:0;bottom:.03em;height:.11em;border-radius:999px;background:linear-gradient(90deg,#9b7cff,#57a7ff);opacity:.82;z-index:-1;transform:skewX(-12deg)}
+.hero-copy h1 span{display:block;color:inherit;font:inherit;font-weight:500;letter-spacing:-.052em}
 .hero-copy>p{max-width:720px;color:#c1c7d8;font-size:18px;line-height:1.65}
 .hero-benefits{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}
 .hero-benefits span{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid rgba(169,183,220,.18);border-radius:999px;background:rgba(255,255,255,.045);color:#d6dbea;font-size:11px;font-weight:650}
