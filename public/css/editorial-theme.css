@@ -15,46 +15,30 @@
 }
 
 body[data-route="author"]{
-  --cursor-x:50vw;
-  --cursor-y:20vh;
   font-family:var(--font-ui);
   color:var(--ink-text);
   background:linear-gradient(155deg,#080c18 0%,#10152a 52%,#090e1c 100%);
 }
-body[data-route="author"]::before{
-  content:"";
-  position:fixed;
-  inset:-22%;
-  z-index:0;
-  pointer-events:none;
-  opacity:.72;
-  background:
-    radial-gradient(ellipse 34% 29% at 22% 28%,rgba(71,169,237,.42),transparent 72%),
-    radial-gradient(ellipse 31% 36% at 72% 20%,rgba(137,84,241,.48),transparent 72%),
-    radial-gradient(ellipse 28% 34% at 77% 73%,rgba(236,83,156,.27),transparent 74%),
-    radial-gradient(ellipse 34% 27% at 31% 78%,rgba(73,87,229,.34),transparent 74%);
-  filter:blur(54px) saturate(135%);
-  transform:translate3d(0,0,0) scale(1.04);
-  animation:lava-drift 16s ease-in-out infinite alternate;
-}
-body[data-route="author"]::after{
-  content:"";
+.liquid-ink-canvas{
   position:fixed;
   inset:0;
+  width:100%;
+  height:100%;
   z-index:0;
   pointer-events:none;
-  opacity:.95;
-  background:radial-gradient(540px at var(--cursor-x) var(--cursor-y),rgba(108,192,255,.26),rgba(149,91,241,.14) 30%,rgba(238,94,169,.06) 52%,transparent 73%);
-  filter:saturate(130%);
-  mix-blend-mode:screen;
+  opacity:.9;
+  filter:saturate(118%) contrast(106%);
+  transform:translateZ(0);
+}
+body[data-route="author"].liquid-ink-fallback{
+  background:
+    radial-gradient(ellipse at 18% 18%,rgba(37,130,224,.45),transparent 45%),
+    radial-gradient(ellipse at 80% 30%,rgba(119,55,221,.5),transparent 48%),
+    radial-gradient(ellipse at 55% 82%,rgba(213,39,133,.3),transparent 46%),
+    #080c18;
 }
 body[data-route="author"] main,body[data-route="author"] .creator-footer{position:relative;z-index:1}
 .author-page{background:transparent!important}
-@keyframes lava-drift{
-  0%{transform:translate3d(-3%,-2%,0) scale(1.04) rotate(-2deg)}
-  45%{transform:translate3d(3%,1%,0) scale(1.09) rotate(2deg)}
-  100%{transform:translate3d(-1%,4%,0) scale(1.06) rotate(-1deg)}
-}
 
 .author-header{
   min-height:76px;
@@ -214,7 +198,6 @@ body[data-route="author"] main,body[data-route="author"] .creator-footer{positio
 }
 
 @media(prefers-reduced-motion:reduce){
-  body[data-route="author"]::before{animation:none}
-  body[data-route="author"]::after{display:none}
+  .liquid-ink-canvas{display:none}
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
