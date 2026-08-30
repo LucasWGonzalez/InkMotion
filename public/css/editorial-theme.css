@@ -75,7 +75,7 @@ body[data-route="author"] main,body[data-route="author"] .creator-footer{positio
 .test-sheet-copy h2{font-size:clamp(27px,3vw,36px)}
 .test-sheet-copy>p{color:var(--ink-muted);font-size:14px}
 .test-sheet-meta span{border-color:rgba(180,165,255,.22);background:rgba(155,124,255,.09);color:#c9cce0}
-.test-sheet-cta{justify-self:center;margin-inline:auto}
+.test-sheet-cta{display:inline-flex;align-items:center;justify-content:center;text-align:center;line-height:1.15}
 
 .btn{border-radius:12px;letter-spacing:.035em;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease,border-color .18s ease}
 .btn:hover{transform:translateY(-2px);filter:brightness(1.07)}
