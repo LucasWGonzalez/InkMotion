@@ -68,7 +68,7 @@ function installStepHierarchy() {
   const upload = document.querySelector('.upload-card');
   const oldHeading = document.querySelector('.creator-grid')?.previousElementSibling;
   if (upload && oldHeading?.classList.contains('flow-section-heading')) {
-    oldHeading.replaceWith(stepHeader('01', 'PASO 1 · ARCHIVOS', 'Uní la obra con su animación', 'Cargá la imagen que se imprimirá y el video que aparecerá sobre ella.'));
+    oldHeading.replaceWith(stepHeader('01', 'PASO 1 · ARCHIVOS', 'Uní la obra con su animación', 'Subí la imagen que se imprimirá y su video con el mismo encuadre.'));
     upload.prepend(document.querySelector('.creator-grid')?.previousElementSibling);
   }
 
@@ -78,7 +78,7 @@ function installStepHierarchy() {
 
   const publish = document.querySelector('.publish-card');
   if (publish && !publish.querySelector('.flow-section-heading')) {
-    publish.prepend(stepHeader('03', 'PASO 3 · PUBLICAR', 'Dale un nombre y creá la obra', 'Revisá los archivos y generá la Lámina Maestra junto con su experiencia AR.'));
+    publish.prepend(stepHeader('03', 'PASO 3 · PUBLICAR', 'Dale un nombre y creá la obra', 'Generá la Lámina Maestra y su experiencia AR.'));
   }
 }
 
