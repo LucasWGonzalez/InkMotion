@@ -57,10 +57,36 @@ function ensurePublishedPreview() {
   sync();
 }
 
+function stepHeader(number, label, title, description) {
+  const header = document.createElement('div');
+  header.className = 'flow-section-heading';
+  header.innerHTML = `<span class="flow-step">${number}</span><div><span class="flow-kicker">${label}</span><h3>${title}</h3><p>${description}</p></div>`;
+  return header;
+}
+
+function installStepHierarchy() {
+  const upload = document.querySelector('.upload-card');
+  const oldHeading = document.querySelector('.creator-grid')?.previousElementSibling;
+  if (upload && oldHeading?.classList.contains('flow-section-heading')) {
+    oldHeading.replaceWith(stepHeader('01', 'PASO 1 · ARCHIVOS', 'Uní la obra con su animación', 'Cargá la imagen que se imprimirá y el video que aparecerá sobre ella.'));
+    upload.prepend(document.querySelector('.creator-grid')?.previousElementSibling);
+  }
+
+  const uploadLabels = upload?.querySelectorAll('.drop-icon');
+  if (uploadLabels?.[0]) uploadLabels[0].textContent = 'IMG';
+  if (uploadLabels?.[1]) uploadLabels[1].textContent = 'MP4';
+
+  const publish = document.querySelector('.publish-card');
+  if (publish && !publish.querySelector('.flow-section-heading')) {
+    publish.prepend(stepHeader('03', 'PASO 3 · PUBLICAR', 'Dale un nombre y creá la obra', 'Revisá los archivos y generá la Lámina Maestra junto con su experiencia AR.'));
+  }
+}
+
 function start() {
   installLiquidInkBackground();
   installVersionedDownloads();
   ensurePublishedPreview();
+  installStepHierarchy();
   if (el('btn-view-projects')) el('btn-view-projects').textContent = 'Ver Mis obras';
 }
 
