@@ -1,3 +1,5 @@
+import { installLiquidInkBackground } from '../core/LiquidInkBackground.js';
+
 const VERSION_FALLBACK = 3;
 
 function el(id) { return document.getElementById(id); }
@@ -55,23 +57,10 @@ function ensurePublishedPreview() {
   sync();
 }
 
-function installCursorGlow() {
-  if (!window.matchMedia?.('(pointer: fine)').matches) return;
-  let frame = null;
-  window.addEventListener('pointermove', (event) => {
-    if (frame) return;
-    frame = window.requestAnimationFrame(() => {
-      document.body.style.setProperty('--cursor-x', `${event.clientX}px`);
-      document.body.style.setProperty('--cursor-y', `${event.clientY}px`);
-      frame = null;
-    });
-  }, { passive: true });
-}
-
 function start() {
+  installLiquidInkBackground();
   installVersionedDownloads();
   ensurePublishedPreview();
-  installCursorGlow();
   if (el('btn-view-projects')) el('btn-view-projects').textContent = 'Ver Mis obras';
 }
 
