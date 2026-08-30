@@ -96,7 +96,8 @@ body[data-route="author"]::before{
 .flow-section-heading h3{margin:0;font-size:29px}
 .flow-section-heading p{margin:4px 0 0;color:var(--ink-muted);font-size:13px}
 
-.creator-grid{grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:20px}
+.creator-grid{grid-template-columns:minmax(0,1fr);gap:20px}
+.creator-grid>.upload-card,.creator-grid>.layout-studio,.creator-grid>.publish-card{grid-column:1/-1;width:100%}
 .upload-card,.publish-card{padding:22px}
 .upload-card{border-color:rgba(106,162,255,.2)}
 .drop-zone{position:relative;min-height:210px;border:1px dashed rgba(145,179,255,.48);background:linear-gradient(145deg,rgba(65,114,190,.1),rgba(122,91,226,.07));transition:transform .18s ease,border-color .18s ease,background .18s ease}
@@ -120,7 +121,9 @@ body[data-route="author"]::before{
 .layout-studio-head h3{font-size:30px!important}
 .layout-mode-card{border-color:rgba(183,193,222,.18)!important;background:rgba(255,255,255,.045)!important}
 .layout-mode-card.is-active{border-color:rgba(155,124,255,.65)!important;background:linear-gradient(145deg,rgba(123,91,225,.2),rgba(52,135,197,.12))!important;box-shadow:0 10px 28px rgba(67,67,170,.18)}
-.layout-preview-shell{background:var(--ink-paper)!important;box-shadow:0 22px 48px rgba(2,5,15,.36)}
+.layout-preview-shell{overflow:hidden;border:1px solid rgba(183,195,226,.16);border-radius:20px;background:#0d1222!important;box-shadow:0 22px 48px rgba(2,5,15,.36)}
+.layout-preview-stage{border:0!important;border-radius:19px 19px 0 0!important;background:radial-gradient(circle at 50% 18%,rgba(118,87,237,.13),transparent 58%),#0b1020!important}
+.layout-preview-note{margin-top:0!important;padding:12px 15px;border-top:1px solid rgba(183,195,226,.13);background:#141a2c;color:#aeb7cd!important}
 
 .final-sheet-result{border-color:rgba(92,224,155,.35);background:linear-gradient(145deg,rgba(18,51,48,.97),rgba(20,25,44,.99));box-shadow:0 30px 80px rgba(3,18,22,.4)}
 .final-sheet-result .publish-success strong{font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;font-size:28px}
