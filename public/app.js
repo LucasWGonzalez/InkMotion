@@ -154,15 +154,15 @@ class InkMotionApp {
     const grid = document.getElementById('projects-grid');
     status.hidden = false;
     status.dataset.state = 'loading';
-    status.textContent = 'Cargando tus trabajos…';
+    status.textContent = 'Cargando tus obras…';
     grid.setAttribute('aria-busy', 'true');
     try {
       this.myProjects = await this.store.listMyProjects();
       this.renderMyProjects();
     } catch (error) {
-      console.error('[InkMotion] No se pudo cargar Mis trabajos.', error);
+      console.error('[InkMotion] No se pudo cargar Mis obras.', error);
       status.dataset.state = 'error';
-      status.textContent = this.errorMessage(error, 'No pudimos cargar tus trabajos. Actualizá la página para reintentar.');
+      status.textContent = this.errorMessage(error, 'No pudimos cargar tus obras. Actualizá la página para reintentar.');
     } finally {
       grid.removeAttribute('aria-busy');
     }
