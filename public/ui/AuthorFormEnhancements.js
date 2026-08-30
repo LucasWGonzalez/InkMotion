@@ -58,6 +58,7 @@ function ensurePublishedPreview() {
 function start() {
   installVersionedDownloads();
   ensurePublishedPreview();
+  if (el('btn-view-projects')) el('btn-view-projects').textContent = 'Ver Mis obras';
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
