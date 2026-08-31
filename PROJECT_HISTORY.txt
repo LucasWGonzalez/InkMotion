@@ -1,7 +1,7 @@
 INKMOTION - REGISTRO GENERAL DEL PROYECTO
 =========================================
 
-Ultima actualizacion: 29 de agosto de 2026
+Ultima actualizacion: 30 de agosto de 2026
 Repositorio: https://github.com/LucasWGonzalez/InkMotion
 Rama de produccion: master
 Produccion: https://ink-motion-pied.vercel.app
@@ -462,6 +462,73 @@ ETAPA 24 - Cierre UX del flujo basico
 - Version documentada: MVP estable 2026-08-29.2.
 
 
+ETAPA 25 - Auditoria tecnica de readiness para prelanzamiento
+- Evaluacion global de readiness tecnico: aproximadamente 7,5/10.
+- Estado recomendado: apto para beta controlada; no abrir todavia adquisicion paga
+  a escala sin una etapa final de hardening.
+- La arquitectura actual se considera suficiente para el MVP y no se recomienda
+  una migracion de framework antes del prelanzamiento.
+- Fortalezas principales: arquitectura pequena y modular, flujo de publicacion
+  recuperable ante errores, suite automatizada existente, rutas simples en Vercel,
+  Supabase separado para datos/storage y compatibilidad hacia atras.
+- Principal superficie de riesgo: combinacion movil + camara + MindAR + video +
+  permisos + restricciones particulares de navegador.
+- La prioridad tecnica previa a beta debe ser observabilidad, E2E real, matriz de
+  dispositivos, seguridad Supabase y performance movil, antes que nuevas features.
+
+Matriz minima de compatibilidad fisica previa a apertura:
+- iPhone + Safari: obligatorio.
+- iPhone + Chrome/WebKit: obligatorio.
+- Android + Chrome: obligatorio.
+- Android gama media/baja: obligatorio.
+- Navegadores embebidos de Instagram/TikTok: verificar comportamiento y fallback.
+- Desktop Chrome/Safari: control complementario.
+
+Brechas detectadas:
+- Los tests actuales cubren flujos y regresiones de codigo, pero parte de la suite
+  valida estructura/patrones y no sustituye un E2E real con navegador, Supabase,
+  compilacion MindAR, camara y reproduccion.
+- Falta observabilidad suficiente para detectar automaticamente en que paso falla
+  un usuario real.
+- Debe completarse una auditoria especifica de RLS/Auth/Storage antes de monetizar.
+- Deben revisarse consumo GPU/memoria y efectos visuales en Android de gama media
+  y baja, especialmente para no competir con el visor AR.
+- Deben verificarse limites de carga del lado cliente para evitar uploads fuera de
+  especificacion y consumo innecesario de storage/egress.
+
+Eventos minimos recomendados de observabilidad:
+- publication_started / publication_success / publication_failed.
+- camera_permission_denied.
+- mindar_compile_started / mindar_compile_failed.
+- target_found / target_lost.
+- video_play_failed.
+- share_failed / download_failed.
+- navegador, OS, etapa del flujo, mensaje de error y tiempos relevantes.
+
+E2E minimos requeridos:
+1) Autor: login -> imagen -> video -> compilacion -> publicacion -> PDF/lamina.
+2) Lector: URL/QR -> permiso de camara -> target encontrado -> video AR.
+3) Error/recovery: fallo de upload o permiso/camara -> mensaje claro -> reintento.
+
+Checklist bloqueante recomendado antes de abrir beta:
+1) E2E completo del autor.
+2) E2E completo del lector.
+3) iPhone y Android probados fisicamente.
+4) Auditoria RLS/Auth/Storage de Supabase.
+5) Error tracking/observabilidad activo.
+6) Analytics del funnel de activacion.
+7) Limites de upload verificados.
+8) Rollback probado hacia una referencia estable.
+
+Criterio de salida:
+- Si los ocho puntos anteriores pasan, InkMotion puede abrir una beta cerrada de
+  20-30 usuarios.
+- El objetivo no es llegar a 10/10 antes de validar mercado, sino elevar readiness
+  desde ~7,5/10 a ~9/10 reduciendo riesgos que impiden diagnosticar fallos reales.
+- La metrica tecnica-operativa mas importante del prelanzamiento sera el porcentaje
+  de usuarios que logra completar su propia experiencia AR de punta a punta.
+
+
 15. DECISIONES DE PRODUCTO VIGENTES
 -----------------------------------
 
@@ -500,14 +567,24 @@ ETAPA 24 - Cierre UX del flujo basico
 17. PROXIMOS PASOS
 ------------------
 
+Prioridad de prelanzamiento:
+- Incorporar observabilidad/error tracking y analytics de funnel.
+- Construir E2E real para autor, lector y recovery.
+- Ejecutar matriz fisica de pruebas Android/iOS y navegadores embebidos.
+- Auditar Supabase RLS/Auth/Storage y confirmar aislamiento entre cuentas.
+- Verificar limites de upload, tiempos de compilacion y consumo en gama media/baja.
+- Probar rollback completo a la ultima referencia estable.
+- Ejecutar beta cerrada con 20-30 usuarios antes de activar publicidad de adquisicion.
+
+Continuidad de producto:
 - Refinar el editor personalizado a partir de pruebas impresas reales.
 - Incorporar presets orientados a libro, menu, packaging y manual tecnico.
 - Mejorar analisis automatico de contraste entre marco, obra y QR.
 - Incorporar recomendaciones de tamaño fisico minimo del QR segun impresion.
 - Probar materiales y superficies diferentes a papel mate.
-- Realizar matriz de pruebas Android/iOS.
 - Mejorar pruebas automatizadas de regresion del generador de laminas.
-- Retomar monetizacion/pagos una vez estabilizada la capa editorial del MVP.
+- Retomar monetizacion/pagos una vez completado el hardening de prelanzamiento y
+  estabilizada la capa editorial del MVP.
 
 
 18. COMMITS / HITOS DE REFERENCIA
@@ -549,6 +626,10 @@ Hitos de estabilizacion integral (29 de agosto de 2026):
 - PR #24  eliminacion del QR y boton AR redundantes
 - a121e09  cierre funcional y UX previo a documentacion
 - release/stable-2026-08-29-v2  MVP estable documentado con suite 20/20
+
+Hito de readiness de prelanzamiento (30 de agosto de 2026):
+- Auditoria tecnica registra estado ~7,5/10, bloqueantes de beta, matriz movil,
+  necesidades de observabilidad/E2E/seguridad y criterio de salida a beta cerrada.
 
 
 19. NOTAS DE MANTENIMIENTO
